@@ -1,0 +1,132 @@
+package com.kurage.api.controller;
+
+import com.kurage.api.domain.User;
+import com.kurage.api.dto.request.UpdateFunctionsRequest;
+import com.kurage.api.dto.response.HovercardResponse;
+import com.kurage.api.dto.response.ProfileVisitorResponse;
+import com.kurage.api.dto.response.TeamInvitationResponse;
+import com.kurage.api.dto.response.TeamResponse;
+import com.kurage.api.dto.response.UserResponse;
+import com.kurage.api.service.ProfileVisitService;
+import com.kurage.api.service.UserService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.List;
+
+@RestController
+@RequestMapping("/users")
+@RequiredArgsConstructor
+public class UserController {
+
+    private final UserService userService;
+    private final ProfileVisitService profileVisitService;
+
+    @GetMapping("/me")
+    public ResponseEntity<UserResponse> getMe(@AuthenticationPrincipal User user) {
+        return userService.getUserBySteamId(user.getSteamId64(), user)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<UserResponse>> searchUsers(@RequestParam("q") String query) {
+        return ResponseEntity.ok(userService.searchUsers(query));
+    }
+
+    @GetMapping("/kurage/{kurageId}")
+    public ResponseEntity<UserResponse> getUserByKurageId(
+            @PathVariable Long kurageId,
+            @AuthenticationPrincipal User currentUser) {
+        return userService.getUserByKurageId(kurageId, currentUser)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{identifier}")
+    public ResponseEntity<UserResponse> getUserByIdentifier(
+            @PathVariable String identifier,
+            @AuthenticationPrincipal User currentUser) {
+        return userService.getUserByIdentifier(identifier, currentUser)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{kurageId}/hovercard")
+    public ResponseEntity<HovercardResponse> getHovercard(@PathVariable Long kurageId) {
+        return userService.getHovercard(kurageId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/me/visitors")
+    public ResponseEntity<List<ProfileVisitorResponse>> getMyVisitors(
+            @AuthenticationPrincipal User user,
+            @RequestParam(value = "limit", defaultValue = "20") int limit) {
+        return ResponseEntity.ok(profileVisitService.getRecentVisitors(user, limit));
+    }
+
+    @PostMapping("/me/avatar")
+    public ResponseEntity<UserResponse> updateAvatar(
+            @AuthenticationPrincipal User user,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            return ResponseEntity.ok(userService.updateAvatar(user, file));
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PutMapping("/me/username")
+    public ResponseEntity<UserResponse> updateUsername(
+            @AuthenticationPrincipal User user,
+            @RequestParam("username") String username) {
+        if (username == null || username.trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(userService.updateUsername(user, username.trim()));
+    }
+
+    @PutMapping("/me/country")
+    public ResponseEntity<UserResponse> updateCountry(
+            @AuthenticationPrincipal User user,
+            @RequestParam("country") String country) {
+        if (country != null && country.trim().length() > 2) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(userService.updateCountry(user, country != null ? country.trim() : null));
+    }
+
+    @PutMapping("/me/steam-sync")
+    public ResponseEntity<UserResponse> syncSteamProfile(
+            @AuthenticationPrincipal User user,
+            @RequestParam(value = "type", defaultValue = "both") String type) {
+        return ResponseEntity.ok(userService.syncSteamProfile(user, type));
+    }
+
+    @PutMapping("/me/functions")
+    public ResponseEntity<UserResponse> updateFunctions(
+            @AuthenticationPrincipal User user,
+            @RequestBody UpdateFunctionsRequest request) {
+        return ResponseEntity.ok(userService.updateFunctions(user, request.primaryFunction(), request.secondaryFunction()));
+    }
+
+    @PutMapping("/me/faceit-sync")
+    public ResponseEntity<UserResponse> syncFaceitProfile(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(userService.syncFaceitProfile(user));
+    }
+
+    @GetMapping("/me/teams")
+    public ResponseEntity<List<TeamResponse>> getMyTeams(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(userService.getUserTeams(user));
+    }
+
+    @GetMapping("/me/invites")
+    public ResponseEntity<List<TeamInvitationResponse>> getMyInvites(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(userService.getUserInvites(user));
+    }
+}

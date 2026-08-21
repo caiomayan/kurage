@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.git
+.github
+.idea
+.vscode
+target
+*.log
+compose.yaml
+docker-compose.yml
+setup_ec2.sh
+

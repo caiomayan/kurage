@@ -1,0 +1,66 @@
+KURAGE PROPRIETARY SOFTWARE LICENSE
+Version 1.0 — 20 August 2026
+
+Copyright (c) 2026 Caio Mayan. All rights reserved.
+
+1. SCOPE
+
+This license applies to the Kurage source code, documentation, designs, database
+schemas, configuration, and other original material in this repository, except
+for:
+
+  a. the contents of server/plugins, which are licensed separately under the MIT
+     License found in server/plugins/LICENSE; and
+  b. third-party software, trademarks, data, and assets, which remain subject to
+     their respective owners' terms and licenses.
+
+2. NO GENERAL LICENSE
+
+No permission is granted to use, copy, modify, merge, publish, distribute,
+sublicense, sell, host, provide as a service, or create derivative works from the
+Covered Material. All rights not expressly granted below are reserved by the
+Copyright Holder.
+
+3. LIMITED TECHNICAL-EVALUATION PERMISSION
+
+If the Copyright Holder has expressly granted you access to this private
+repository for recruitment, due diligence, or technical evaluation, you receive
+a limited, non-exclusive, non-transferable, revocable permission to:
+
+  a. view the Covered Material; and
+  b. make the minimum local copies reasonably necessary to run it in a private,
+     non-production environment solely for that authorized evaluation.
+
+This permission does not allow production or public-network deployment,
+commercial use, redistribution, publication, sublicensing, incorporation into
+another product, competitive hosting, removal of notices, or use of the Covered
+Material or its outputs to train or improve an artificial-intelligence or
+machine-learning system. It ends automatically when repository access is
+revoked or the evaluation ends, whichever occurs first. Local copies must then
+be deleted, except where retention is required by law.
+
+4. TRADEMARKS AND ASSETS
+
+No trademark, trade-name, logo, domain-name, publicity, or endorsement rights
+are granted. References to Counter-Strike, Steam, Valve, FACEIT, or other third
+parties do not imply sponsorship or affiliation. See THIRD_PARTY_NOTICES.md.
+
+5. CONTRIBUTIONS
+
+Unsolicited contributions are not accepted. A contribution may be incorporated
+only under a separate written intellectual-property agreement with the
+Copyright Holder.
+
+6. DISCLAIMER
+
+THE COVERED MATERIAL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT
+PERMITTED BY LAW, THE COPYRIGHT HOLDER SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGE,
+OR OTHER LIABILITY ARISING FROM THE COVERED MATERIAL OR ITS USE.
+
+7. GOVERNING LAW
+
+This license is governed by the laws of Brazil, without prejudice to mandatory
+consumer, employment, or data-protection law where applicable.
+

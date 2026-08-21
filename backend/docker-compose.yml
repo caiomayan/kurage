@@ -1,0 +1,100 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kurage_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-kuragedb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+
+  redis:
+    image: redis:7-alpine
+    container_name: kurage_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+
+  mongo:
+    image: mongo:6-jammy
+    container_name: kurage_mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin123}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    command: ["--wiredTigerCacheSizeGB", "0.25"]
+    deploy:
+      resources:
+        limits:
+          memory: 350M
+
+  api:
+    image: ${KURAGE_API_IMAGE:-kurage-api:local}
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: kurage_api
+    restart: always
+    depends_on:
+      - db
+      - redis
+      - mongo
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${DB_NAME:-kuragedb}
+      - SPRING_DATASOURCE_USERNAME=${DB_USER:-postgres}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-postgres}
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_MONGODB_URI=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin123}@mongo:27017/kurage_notifications?authSource=admin
+      - STEAM_API_KEY=${STEAM_API_KEY}
+      - FACEIT_API_KEY=${FACEIT_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-d3d3LmNhaW9tYXlhbi5jb20uYnIubmFvLnRlbS5wYXJhbm9pYQ==}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:8080}
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN}
+      - GAME_SERVER_API_KEY=${GAME_SERVER_API_KEY:-}
+      - CLOUDFLARE_R2_ACCESS_KEY=${CLOUDFLARE_R2_ACCESS_KEY}
+      - CLOUDFLARE_R2_SECRET_KEY=${CLOUDFLARE_R2_SECRET_KEY}
+      - CLOUDFLARE_R2_ENDPOINT=${CLOUDFLARE_R2_ENDPOINT}
+      - CLOUDFLARE_R2_BUCKET_NAME=${CLOUDFLARE_R2_BUCKET_NAME:-kurage-bucket}
+      - CLOUDFLARE_R2_PUBLIC_URL=${CLOUDFLARE_R2_PUBLIC_URL}
+    deploy:
+      resources:
+        limits:
+          memory: 1000M
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: kurage_caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  mongodata:
+  caddy_data:
+  caddy_config:

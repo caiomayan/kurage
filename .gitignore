@@ -1,0 +1,124 @@
+# Kurage monorepo — defensive root ignore rules
+
+# Secrets and local environment files.
+# Keep only documented, value-free templates under version control.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/.envrc
+**/.direnv/
+**/secrets/
+**/.secrets/
+**/*secret*.json
+**/*secrets*.json
+**/*credential*.json
+**/*credentials*.json
+**/*service-account*.json
+**/*service_account*.json
+!**/*example*.json
+!**/*template*.json
+
+# Private keys, certificates, keystores and encrypted vaults
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.der
+*.crt
+*.cer
+*.kdbx
+
+# Java / Maven
+**/target/
+**/.mvn/timing.properties
+**/*.class
+hs_err_pid*
+
+# Node / Next.js
+**/node_modules/
+**/.next/
+**/out/
+**/coverage/
+**/*.tsbuildinfo
+**/next-env.d.ts
+**/.vercel/
+**/.turbo/
+**/.cache/
+**/.parcel-cache/
+**/.eslintcache
+**/.stylelintcache
+**/.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# .NET / CounterStrikeSharp
+**/bin/
+**/obj/
+server/release/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Infrastructure state and local database exports
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.auto.tfvars
+!**/*.auto.tfvars.example
+**/pgdata*/
+**/mongodata*/
+**/redisdata*/
+**/backups/
+**/dumps/
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+
+# IDE and operating-system metadata
+**/.idea/
+**/.vscode/*
+!**/.vscode/extensions.json
+!**/.vscode/settings.example.json
+**/.settings/
+**/.classpath
+**/.project
+**/.factorypath
+*.iml
+*.iws
+*.ipr
+.DS_Store
+Thumbs.db
+
+# Logs, reports and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.pid
+*.pid.lock
+*.stackdump
+*.swp
+*.swo
+test-results/
+playwright-report/
+
+# Local infrastructure state
+**/.docker/
+
+# Local security scanner reports
+trivy-report.*
+gitleaks-report.*
+
+# Duplicate source assets. The canonical runtime copies are under
+# frontend/public/thumbs with clean map names.
+/thumbs/
+/frontend/public/thumbs/*_png*.png
