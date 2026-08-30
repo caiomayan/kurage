@@ -70,7 +70,7 @@ jobs:
         run: echo "value=ghcr.io/${GITHUB_REPOSITORY,,}/backend" >> "${GITHUB_OUTPUT}"
       - name: Build and publish ARM64 and AMD64 image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: backend
           file: backend/Dockerfile
