@@ -14,7 +14,7 @@
   "dependencies": {
     "@base-ui/react": "^1.7.0",
     "@floating-ui/react": "^0.27.20",
-    "@hookform/resolvers": "^5.9.0",
+    "@hookform/resolvers": "^5.9.1",
     "@ianlucas/cs2-lib": "^9.0.0",
     "@ianlucas/cs2-lib-inspect": "^9.0.0",
     "@splinetool/runtime": "^1.12.98",
