@@ -21,7 +21,7 @@ jobs:
       NEXT_PUBLIC_CS2_CONNECT_HOST: retake.caiomayan.com:27015
       NEXT_PUBLIC_R2_PUBLIC_URL: https://assets.caiomayan.com
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

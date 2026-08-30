@@ -46,7 +46,7 @@ jobs:
       TF_STATE_NAMESPACE: ${{ vars.TF_STATE_NAMESPACE }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: hashicorp/setup-terraform@v3
         with:
