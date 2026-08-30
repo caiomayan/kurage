@@ -1,7 +1,9 @@
 # Alpha deployment — Vercel, Cloudflare, and Oracle Cloud
 
-**Status:** configuration implemented, not yet applied to external accounts.  
-**Documentation last validated:** 29 August 2026.
+**Status:** OCI infrastructure provisioned and bootstrap confirmed by the operator;
+first web deployment still pending.
+
+**Documentation last validated:** 30 August 2026.
 
 ## Adopted decision
 
@@ -25,6 +27,26 @@ contract remains portable. PostgreSQL and Redis are never exposed publicly.
 
 The executable runbook, secret inventory, and exact first-deployment order are
 documented in [`infra/README.md`](../../infra/README.md).
+
+## Web-only initial deployment
+
+CS2 remains on the developer's notebook, connected exclusively to the local
+backend. In the deployed environment, keep `GAME_SERVER_BOOTSTRAP_ENABLED=false`
+and `FIXED_SERVER_HOSTNAME=` empty. In Vercel, leave
+`NEXT_PUBLIC_CS2_CONNECT_HOST` empty or unset. Do not advertise a fictional
+endpoint or the notebook's IP as a public game server.
+
+Migrations retain the initial Retake #1 registration, offline without valid
+heartbeats. Disabling bootstrap neither deletes that record nor disables the
+plugin API: it only skips public endpoint reconciliation. `GAME_SERVER_API_KEY`
+remains mandatory and must be production-specific, different from the local
+secret. Local configuration does not need to change.
+
+Once the public Retake is ready, provide its real hostname/IP and port, enable
+bootstrap, and redeploy the backend. Configure the plugin with the production
+API URL, matching server identifier, and production key. Also set
+`NEXT_PUBLIC_CS2_CONNECT_HOST` to `host:port` and redeploy the frontend.
+Availability will depend on real heartbeats.
 
 ## Deliberate security properties
 

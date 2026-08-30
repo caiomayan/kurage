@@ -74,10 +74,12 @@ services:
       # cookie unnecessarily lets sibling subdomains overwrite session state.
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
       - GAME_SERVER_API_KEY=${GAME_SERVER_API_KEY:?GAME_SERVER_API_KEY is required}
-      - GAME_SERVER_BOOTSTRAP_ENABLED=true
+      # Web-only alpha: keep the initial server offline until a public CS2 host exists.
+      - GAME_SERVER_BOOTSTRAP_ENABLED=${GAME_SERVER_BOOTSTRAP_ENABLED:-false}
       - FIXED_SERVER_ID=${FIXED_SERVER_ID:?FIXED_SERVER_ID is required}
       - FIXED_SERVER_DISPLAY_NAME=${FIXED_SERVER_DISPLAY_NAME:?FIXED_SERVER_DISPLAY_NAME is required}
-      - FIXED_SERVER_HOSTNAME=${FIXED_SERVER_HOSTNAME:?FIXED_SERVER_HOSTNAME is required}
+      # The application requires a hostname when bootstrap is enabled.
+      - FIXED_SERVER_HOSTNAME=${FIXED_SERVER_HOSTNAME:-}
       - FIXED_SERVER_PORT=${FIXED_SERVER_PORT:?FIXED_SERVER_PORT is required}
       - FIXED_SERVER_MAX_PLAYERS=${FIXED_SERVER_MAX_PLAYERS:-10}
       - CLOUDFLARE_R2_ACCESS_KEY=${CLOUDFLARE_R2_ACCESS_KEY}

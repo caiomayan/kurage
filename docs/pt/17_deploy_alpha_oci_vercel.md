@@ -1,7 +1,9 @@
 # Deploy da alfa — Vercel, Cloudflare e Oracle Cloud
 
-**Estado:** configuração implementada, ainda não aplicada às contas externas.  
-**Última validação documental:** 29/08/2026.
+**Estado:** infraestrutura OCI provisionada e bootstrap confirmado pelo operador;
+primeiro deploy web ainda pendente.
+
+**Última validação documental:** 30/08/2026.
 
 ## Decisão adotada
 
@@ -25,6 +27,26 @@ de deploy continua portável. PostgreSQL e Redis não são publicados na interne
 
 O runbook executável, a lista de segredos e a ordem exata do primeiro deploy
 estão em [`infra/README.md`](../../infra/README.md).
+
+## Primeira publicação somente web
+
+O CS2 continua no notebook, conectado exclusivamente ao backend local. No
+ambiente publicado, mantenha `GAME_SERVER_BOOTSTRAP_ENABLED=false` e
+`FIXED_SERVER_HOSTNAME=` vazio. Na Vercel, deixe
+`NEXT_PUBLIC_CS2_CONNECT_HOST` vazio ou ausente. Não anuncie um endereço fictício
+nem o IP do notebook como servidor público.
+
+As migrations mantêm o cadastro inicial do Retake #1, offline sem heartbeats
+válidos. Desabilitar o bootstrap não apaga esse registro nem desativa a API do
+plugin: apenas impede a reconciliação do endereço público. `GAME_SERVER_API_KEY`
+continua obrigatório e deve ser exclusivo de produção, diferente do segredo
+local. Nenhuma configuração local precisa mudar.
+
+Quando o Retake público estiver pronto, preencha seu hostname/IP real e porta,
+ative o bootstrap e faça novo deploy do backend. Configure o plugin com a URL
+da API de produção, o mesmo identificador do servidor e sua chave de produção.
+Atualize também `NEXT_PUBLIC_CS2_CONNECT_HOST` com `host:porta` e publique
+novamente o frontend. A disponibilidade dependerá dos heartbeats reais.
 
 ## Segurança deliberada
 

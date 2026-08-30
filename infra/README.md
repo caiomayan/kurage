@@ -1,7 +1,7 @@
 # Kurage deployment terrain
 
-Last verified: 2026-08-29. Status: **implemented configuration, not yet applied
-to an OCI tenancy or Vercel project**.
+Last updated: 2026-08-30. Status: **OCI infrastructure provisioned and bootstrap
+confirmed by the operator; first web deployment still pending**.
 
 This directory prepares the alpha topology chosen for Kurage:
 
@@ -127,6 +127,22 @@ After the first apply, connect once and compare the host's Ed25519 fingerprint
 through an independent OCI console session. Store the verified `known_hosts` line in
 `DEPLOY_SSH_KNOWN_HOSTS`. Protect both environments with branch restrictions and,
 where the GitHub plan permits it, a required reviewer.
+
+## Initial web-only alpha
+
+The production template defaults to `GAME_SERVER_BOOTSTRAP_ENABLED=false` and
+an empty `FIXED_SERVER_HOSTNAME`. This allows the web stack to start before a
+public CS2 host exists. The migration-created Retake registration remains
+offline without valid heartbeats; bootstrap being disabled does not delete
+records or disable the plugin API. Keep a unique production `GAME_SERVER_API_KEY`
+even in this phase, and keep the notebook plugin connected to the local backend.
+Leave Vercel's `NEXT_PUBLIC_CS2_CONNECT_HOST` empty or unset.
+
+When the public Retake is ready, set its real hostname and port, enable bootstrap,
+and redeploy the backend. Configure the plugin with the production API URL,
+matching server ID and production key. Set Vercel's connect host to the real
+`host:port` and redeploy the frontend. Do not change applied migrations or reuse
+the notebook's credentials.
 
 ## DNS and TLS order
 
