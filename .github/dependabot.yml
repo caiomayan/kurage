@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Revisit when eslint-config-next's React plugins support the next ESLint major.
+    # Minor and patch updates remain enabled.
+    ignore:
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: maven
     directory: /backend
     schedule:

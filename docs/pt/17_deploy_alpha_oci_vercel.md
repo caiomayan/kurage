@@ -37,6 +37,10 @@ estão em [`infra/README.md`](../../infra/README.md).
 - Segredos não entram em imagem, Terraform, Compose versionado ou artefatos.
 - O token do GHCR é temporário e removido do host após o deploy.
 - O deploy só ocorre depois dos testes com PostgreSQL e Redis reais.
+- Durante a preparação, mantenha a variável de repositório
+  `BACKEND_DEPLOY_ENABLED` ausente ou `false`: testes e publicação continuam, mas
+  o deploy é pulado. Habilite com `true` somente após configurar VM, DNS e segredos.
+  Depois, use **Backend CI/CD → Run workflow → main** para a primeira implantação.
 - Uma release sem saúde restaura automaticamente a configuração e a imagem
   anteriores.
 

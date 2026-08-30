@@ -116,6 +116,13 @@ Variables:
 - `OCI_HOST` — reserved IP printed by Terraform
 - `API_HEALTH_URL` — `https://api.caiomayan.com/actuator/health`
 
+Repository-level Actions variable (not environment-level):
+
+- `BACKEND_DEPLOY_ENABLED` — leave unset or `false` during bootstrap. Only set
+  `true` after the VM, verified SSH host key, production secrets and DNS are ready.
+  This variable is evaluated before the deployment job starts. Tests and image
+  publication continue while deployment is disabled; the SSH job is skipped.
+
 After the first apply, connect once and compare the host's Ed25519 fingerprint
 through an independent OCI console session. Store the verified `known_hosts` line in
 `DEPLOY_SSH_KNOWN_HOSTS`. Protect both environments with branch restrictions and,
@@ -133,7 +140,9 @@ where the GitHub plan permits it, a required reviewer.
    the Cloudflare proxy **on**.
 5. Set Cloudflare SSL/TLS mode to **Full (strict)**. Caddy obtains and renews the
    origin certificate for `api.caiomayan.com`.
-6. Only after DNS is active, run the first backend deployment.
+6. Only after DNS is active and the backend secrets are configured, set the
+   repository variable `BACKEND_DEPLOY_ENABLED=true`. In Actions, select
+   **Backend CI/CD → Run workflow → main** to run tests, publish and deploy.
 
 The OCI NSG only accepts web traffic from the published Cloudflare IPv4 ranges.
 If Cloudflare adds a range, update both `infra/terraform/oci/main.tf` and
@@ -167,6 +176,8 @@ deployments should use one stable preview hostname that is explicitly added to
 
 A push to `main` runs the backend tests first. Only a passing revision is built
 for `linux/arm64` and `linux/amd64`, published to GHCR and addressed by digest.
+Manual runs on `main` follow the same test and publication gates. Deployment is
+opt-in via `BACKEND_DEPLOY_ENABLED` and validates required settings before SSH.
 The deploy job transfers Compose/Caddy files, installs the environment file with
 mode `0600`, logs in to GHCR with the short-lived workflow token and starts the
 new digest. If the Spring healthcheck does not become healthy, the previous

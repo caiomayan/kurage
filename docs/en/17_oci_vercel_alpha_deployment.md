@@ -38,6 +38,10 @@ documented in [`infra/README.md`](../../infra/README.md).
   build artifacts.
 - The short-lived GHCR token is removed from the host after deployment.
 - Deployment only follows tests against real PostgreSQL and Redis containers.
+- During bootstrap, leave the repository variable `BACKEND_DEPLOY_ENABLED`
+  unset or `false`: tests and publication continue, but deployment is skipped.
+  Set it to `true` only after the VM, DNS and secrets are ready, then use
+  **Backend CI/CD → Run workflow → main** for the first deployment.
 - An unhealthy release automatically restores the previous configuration and
   image.
 

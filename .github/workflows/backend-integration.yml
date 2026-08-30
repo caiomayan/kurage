@@ -1,6 +1,7 @@
 name: Backend CI/CD
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -46,7 +47,7 @@ jobs:
 
   publish:
     name: Publish immutable backend image
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -91,8 +92,12 @@ jobs:
 
   deploy:
     name: Deploy backend to OCI alpha
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Repository variable: keep disabled until Terraform, DNS and secrets are ready.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.BACKEND_DEPLOY_ENABLED == 'true'
     needs: publish
+    concurrency:
+      group: kurage-alpha-backend-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: alpha-backend
@@ -101,6 +106,28 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v6
+      - name: Validate deployment settings
+        shell: bash
+        env:
+          OCI_HOST: ${{ vars.OCI_HOST }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
+        run: |
+          missing=false
+          for setting in OCI_HOST DEPLOY_SSH_PRIVATE_KEY DEPLOY_SSH_KNOWN_HOSTS BACKEND_ENV_FILE; do
+            if [[ -z "${!setting}" ]]; then
+              echo "::error::Missing deployment setting: ${setting}. Complete infra/README.md before enabling deployment."
+              missing=true
+            fi
+          done
+          if [[ "${missing}" == true ]]; then
+            exit 1
+          fi
+          if [[ ! "${OCI_HOST}" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]; then
+            echo "::error::OCI_HOST must be the reserved IPv4 address or a hostname, without protocol, port or whitespace."
+            exit 1
+          fi
       - name: Configure verified SSH transport
         shell: bash
         env:
@@ -132,6 +159,7 @@ jobs:
             ssh -i "${HOME}/.ssh/kurage_deploy" "kurage@${OCI_HOST}" \
               "umask 077; base64 -d > /opt/kurage/backend/incoming/backend.env.next && mv /opt/kurage/backend/incoming/backend.env.next /opt/kurage/backend/incoming/backend.env"
       - name: Pull from GHCR with the short-lived workflow token
+        id: registry-auth
         shell: bash
         env:
           OCI_HOST: ${{ vars.OCI_HOST }}
@@ -155,7 +183,7 @@ jobs:
           API_HEALTH_URL: ${{ vars.API_HEALTH_URL }}
         run: curl --fail --show-error --silent --retry 5 --retry-delay 5 "${API_HEALTH_URL}"
       - name: Remove temporary registry credential
-        if: always()
+        if: always() && (steps.registry-auth.outcome == 'success' || steps.registry-auth.outcome == 'failure')
         shell: bash
         env:
           OCI_HOST: ${{ vars.OCI_HOST }}
