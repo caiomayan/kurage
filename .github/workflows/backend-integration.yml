@@ -33,7 +33,7 @@ jobs:
       - name: Verify Docker engine
         run: docker info
       - name: Unit and containerized integration tests
-        run: ./mvnw --batch-mode --no-transfer-progress verify -Pintegration
+        run: bash ./mvnw --batch-mode --no-transfer-progress verify -Pintegration
       - name: Upload test reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
