@@ -252,6 +252,30 @@ public class RankingService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with Kurage ID: " + kurageId));
 
         PlayerStats stats = playerStatsService.getOrCreateStats(user);
+        int matchesPlayed = stats.getMatchesPlayed() != null ? stats.getMatchesPlayed() : 0;
+        if (matchesPlayed == 0) {
+            PlayerRankingContextResponse unrankedContext = new PlayerRankingContextResponse(
+                    mapToLeaderboardResponse(user, stats, 0, null),
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    null,
+                    List.of()
+            );
+            try {
+                if (redisTemplate != null) {
+                    redisTemplate.opsForValue().set(
+                            cacheKey,
+                            objectMapper.writeValueAsString(unrankedContext),
+                            Duration.ofMinutes(5)
+                    );
+                }
+            } catch (Exception e) {
+                log.warn("Redis unavailable during unranked player context cache write: {}", e.getMessage());
+            }
+            return unrankedContext;
+        }
         int currentPosition = playerStatsRepository.findLeaderboardPosition(stats.getKurageElo());
 
         LocalDate yesterday = LocalDate.now().minusDays(1);

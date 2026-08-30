@@ -16,7 +16,7 @@ export function Footer() {
       {/* Top Ambient Glow */}
       <div 
         className="pointer-events-none absolute left-1/2 top-0 h-[300px] w-full max-w-[800px] -translate-x-1/2 -translate-y-1/2 mix-blend-screen"
-        style={{ background: "radial-gradient(ellipse at center, rgba(169, 200, 192, 0.08) 0%, transparent 70%)" }}
+        style={{ background: "radial-gradient(ellipse at center, rgba(var(--kurage-accent-rgb),0.08) 0%, transparent 70%)" }}
       />
       
       {/* Top Border Highlight */}
@@ -61,8 +61,9 @@ export function Footer() {
                 Legal
               </span>
               <ul className="flex flex-col gap-4">
-                <FooterLink href="#" disabled>Termos de Serviço</FooterLink>
-                <FooterLink href="#" disabled>Privacidade</FooterLink>
+                <FooterLink href="/legal/terms">Termos de Uso</FooterLink>
+                <FooterLink href="/legal/privacy">Privacidade</FooterLink>
+                <FooterLink href="/legal/acceptable-use">Uso aceitável</FooterLink>
               </ul>
             </div>
           </div>
@@ -89,16 +90,7 @@ export function Footer() {
   );
 }
 
-function FooterLink({ href, children, disabled }: { href: string; children: React.ReactNode; disabled?: boolean }) {
-  if (disabled) {
-    return (
-      <li>
-        <span className="text-[14px] text-charcoal cursor-default transition-colors">
-          {children}
-        </span>
-      </li>
-    );
-  }
+function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <li>
       <Link href={href} className="group inline-flex items-center gap-2 text-[14px] text-body transition-colors hover:text-ink">

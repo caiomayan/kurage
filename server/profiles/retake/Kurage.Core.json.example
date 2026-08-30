@@ -1,0 +1,11 @@
+{
+  "ApiUrl": "http://127.0.0.1:8080",
+  "ServerId": "b1a2c3d4-0000-0000-0000-000000000001",
+  "ServerApiKey": "replace-with-a-random-secret-of-at-least-32-characters",
+  "GameMode": "RETAKE",
+  "ServerKind": "FIXED",
+  "ServerDisplayName": "Kurage Retake #1",
+  "HeartbeatIntervalSeconds": 30,
+  "EnableWelcomeChatMessages": true,
+  "ExtensionSettings": {}
+}

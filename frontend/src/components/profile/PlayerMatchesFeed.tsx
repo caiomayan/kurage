@@ -99,7 +99,7 @@ export function PlayerMatchesFeed({ matches = [] }: PlayerMatchesFeedProps) {
 
                 <div className="flex flex-col sm:items-center">
                   <span className="text-[10px] text-stone-500 uppercase">Rating</span>
-                  <span className="font-mono font-bold text-[#a9c8c0] mt-0.5">
+                  <span className="font-mono font-bold text-[var(--kurage-accent)] mt-0.5">
                     {m.rating.toFixed(2)}
                   </span>
                 </div>

@@ -11,6 +11,7 @@ import { SmoothScroll } from "@/providers/SmoothScroll";
 import { ScrollProgress } from "@/components/ui/ScrollProgress";
 
 import { InventoryProvider } from "@/lib/inventory/inventory-context";
+import { APP_DOMAIN } from "@/lib/constants";
 
 // Display Serif: EB Garamond (Google Fonts)
 const ebGaramond = EB_Garamond({
@@ -42,10 +43,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://kurage.caiomayan.com"),
+  metadataBase: new URL(APP_DOMAIN),
   title: {
     template: "Kurage · %s",
     default: "Kurage · O competitivo em um só lugar",
+  },
+  applicationName: "Kurage",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
   },
   description:
     "Portal competitivo de Counter-Strike 2 com identidade digital, rankings ELO em tempo real, telemetria do servidor dedicado e estatísticas avançadas.",
@@ -65,7 +71,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "pt_BR",
-    url: "https://kurage.caiomayan.com",
+    url: APP_DOMAIN,
     siteName: "Kurage",
     title: "Kurage",
     description: "Portal competitivo de Counter-Strike 2.",
@@ -92,7 +98,7 @@ export default function RootLayout({
       lang="pt-BR"
       className={`dark ${inter.variable} ${ebGaramond.variable} ${geist.variable} ${geistMono.variable}`}
     >
-      <body className="min-h-screen bg-canvas font-sans text-ink antialiased selection:bg-accent-blue/20 selection:text-accent-blue">
+      <body className="min-h-screen bg-canvas font-sans text-ink antialiased selection:bg-[var(--kurage-accent)]/20 selection:text-[var(--kurage-accent)]">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-on focus:outline-none focus:ring-2 focus:ring-ring"

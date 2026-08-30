@@ -1,5 +1,6 @@
 package com.kurage.api.service;
 
+import com.kurage.api.config.TransactionHooks;
 import com.kurage.api.domain.ProfileVisit;
 import com.kurage.api.domain.User;
 import com.kurage.api.dto.response.ProfileVisitorResponse;
@@ -36,27 +37,31 @@ public class ProfileVisitService {
             return;
         }
 
+        String rateLimitKey = "ratelimit:visit:" + visitorUser.getId() + ":" + visitedUser.getId();
         try {
-            String rateLimitKey = "ratelimit:visit:" + visitorUser.getId() + ":" + visitedUser.getId();
             Boolean wasSet = redisTemplate.opsForValue().setIfAbsent(rateLimitKey, "1", Duration.ofHours(1));
 
             // Se já existia registro no Redis na última hora, não grava de novo
             if (Boolean.FALSE.equals(wasSet)) {
                 return;
             }
+            TransactionHooks.afterRollback(() -> {
+                try {
+                    redisTemplate.delete(rateLimitKey);
+                } catch (Exception rollbackCleanupException) {
+                    log.warn("Redis unavailable while releasing rolled-back profile visit debounce: {}",
+                            rollbackCleanupException.getMessage());
+                }
+            });
         } catch (Exception e) {
             log.warn("Redis unavailable for profile visit rate limit debounce (proceeding with db save): {}", e.getMessage());
         }
 
-        try {
-            ProfileVisit visit = ProfileVisit.builder()
-                    .visitedUser(visitedUser)
-                    .visitorUser(visitorUser)
-                    .build();
-            profileVisitRepository.save(visit);
-        } catch (Exception e) {
-            log.error("Failed to record profile visit from {} to {}: {}", visitorUser.getId(), visitedUser.getId(), e.getMessage());
-        }
+        ProfileVisit visit = ProfileVisit.builder()
+                .visitedUser(visitedUser)
+                .visitorUser(visitorUser)
+                .build();
+        profileVisitRepository.save(visit);
     }
 
     @Transactional(readOnly = true)
@@ -66,7 +71,7 @@ public class ProfileVisitService {
         }
 
         if (!permissionService.hasFeature(user, "PROFILE_VISITORS")) {
-            throw new AccessDeniedException("Recurso disponível apenas para assinantes PLUS ou superior.");
+            throw new AccessDeniedException("Recurso disponível para assinantes Maré.");
         }
 
         int pageSize = Math.min(Math.max(limit, 1), 50);

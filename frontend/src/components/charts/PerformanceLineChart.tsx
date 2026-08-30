@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { RankingHistoryPoint } from "@/types/ranking";
 
 interface PerformanceLineChartProps {

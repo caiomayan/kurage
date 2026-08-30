@@ -11,7 +11,9 @@ import {
   PiUsers, 
   PiCrosshair, 
   PiArrowRight,
-  PiTrophy
+  PiTrophy,
+  PiWarningCircle,
+  PiSpinnerGap,
 } from "react-icons/pi";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -19,9 +21,7 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
-import { FaceitLevelIcon } from "@/components/ui/faceit-levels/FaceitLevelIcon";
-import { RoleIcon } from "@/components/ui/RoleIcon";
-import { TeamLogo, KNOWN_TEAM_LOGOS } from "@/components/ui/TeamLogo";
+import { TeamLogo } from "@/components/ui/TeamLogo";
 import { CountryFlag } from "@/components/ui/CountryFlag";
 import { RankingOceanicBackground } from "@/components/ranking/RankingOceanicBackground";
 import { UserRankingAnchorBar } from "@/components/ranking/UserRankingAnchorBar";
@@ -30,7 +30,7 @@ import type { LeaderboardPlayer, TeamLeaderboardItem, PageResponse, PlayerRankin
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 type RankingTab = "PLAYERS" | "TEAMS";
-type SortOption = "ELO" | "RATING" | "KD" | "WINRATE" | "MATCHES";
+type SortOption = "ELO" | "KD" | "WINRATE" | "MATCHES";
 
 export default function RankingPage() {
   const { user, isAuthenticated, loginWithSteam } = useAuth();
@@ -47,55 +47,55 @@ export default function RankingPage() {
   });
 
   // Fetch real players from API
-  const { data: playersData } = useQuery({
+  const {
+    data: playersData,
+    isPending: playersPending,
+    isError: playersError,
+    refetch: refetchPlayers,
+  } = useQuery({
     queryKey: ["leaderboard", "players"],
     queryFn: async () => {
-      try {
-        const res = await api.get<PageResponse<LeaderboardPlayer>>("/leaderboard/players?page=0&size=50");
-        return res?.content || [];
-      } catch {
-        return [];
-      }
+      const response = await api.get<PageResponse<LeaderboardPlayer>>("/leaderboard/players?page=0&size=50");
+      if (!Array.isArray(response?.content)) throw new Error("Resposta inválida do ranking de jogadores");
+      return response.content;
     },
     staleTime: 60 * 1000,
   });
 
   // Fetch real teams from API
-  const { data: teamsData } = useQuery({
+  const {
+    data: teamsData,
+    isPending: teamsPending,
+    isError: teamsError,
+    refetch: refetchTeams,
+  } = useQuery({
     queryKey: ["leaderboard", "teams"],
     queryFn: async () => {
-      try {
-        const res = await api.get<PageResponse<TeamLeaderboardItem>>("/leaderboard/teams?page=0&size=30");
-        return res?.content || [];
-      } catch {
-        return [];
-      }
+      const response = await api.get<PageResponse<TeamLeaderboardItem>>("/leaderboard/teams?page=0&size=30");
+      if (!Array.isArray(response?.content)) throw new Error("Resposta inválida do ranking de times");
+      return response.content;
     },
     staleTime: 60 * 1000,
   });
 
-  const playersList = playersData || [];
-  const teamsList = teamsData || [];
-
   // Filtered & Sorted Players
   const filteredPlayers = useMemo(() => {
-    return playersList
+    return (playersData || [])
       .filter((p) => {
         return p.username.toLowerCase().includes(searchQuery.toLowerCase());
       })
       .sort((a, b) => {
         if (sortBy === "ELO") return (b.kurageElo || 0) - (a.kurageElo || 0);
-        if (sortBy === "RATING") return (b.hltvRating || 0) - (a.hltvRating || 0);
         if (sortBy === "KD") return (b.kdRatio || 0) - (a.kdRatio || 0);
         if (sortBy === "WINRATE") return (b.winRate || 0) - (a.winRate || 0);
         if (sortBy === "MATCHES") return (b.matches || 0) - (a.matches || 0);
         return 0;
       });
-  }, [playersList, searchQuery, sortBy]);
+  }, [playersData, searchQuery, sortBy]);
 
   // Filtered & Sorted Teams
   const filteredTeams = useMemo(() => {
-    return teamsList
+    return (teamsData || [])
       .filter((t) => {
         return (
           t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -103,7 +103,7 @@ export default function RankingPage() {
         );
       })
       .sort((a, b) => (b.teamElo || 0) - (a.teamElo || 0));
-  }, [teamsList, searchQuery]);
+  }, [teamsData, searchQuery]);
 
   // Stepped Podium (2nd Place - 1st Place - 3rd Place)
   const firstPlacePlayer = filteredPlayers[0];
@@ -115,6 +115,9 @@ export default function RankingPage() {
   const secondPlaceTeam = filteredTeams[1];
   const thirdPlaceTeam = filteredTeams[2];
   const remainingTeams = filteredTeams.slice(3);
+  const activeRankingPending = activeTab === "PLAYERS" ? playersPending : teamsPending;
+  const activeRankingError = activeTab === "PLAYERS" ? playersError : teamsError;
+  const retryActiveRanking = activeTab === "PLAYERS" ? refetchPlayers : refetchTeams;
 
   return (
     <div className="relative min-h-screen bg-[#020507] font-sans text-ink overflow-hidden pb-32">
@@ -128,7 +131,7 @@ export default function RankingPage() {
         {/* ══════════════════════════════════════════════════════════════
             1. EM PRIMEIRO: O PÓDIO VISUAL (2 - 1 - 3 COM DEGRAUS FÍSICOS)
            ══════════════════════════════════════════════════════════════ */}
-        {activeTab === "PLAYERS" ? (
+        {!activeRankingPending && !activeRankingError && (activeTab === "PLAYERS" ? (
           searchQuery === "" && (
             <motion.div
               initial={{ opacity: 0, y: 30 }}
@@ -298,7 +301,7 @@ export default function RankingPage() {
               </div>
             </motion.div>
           )
-        )}
+        ))}
 
         {/* ══════════════════════════════════════════════════════════════
             2. DEPOIS: TÍTULO E DESCRIÇÃO DA PÁGINA + SELETOR JOGADORES/TIMES
@@ -309,7 +312,7 @@ export default function RankingPage() {
               Os Melhores.
             </h1>
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-body font-sans">
-              O ranking oficial dos jogadores da Kurage. Calibração por ELO, taxa de vitória, impacto e estatísticas em tempo real.
+              O ranking oficial considera somente partidas registradas pela Kurage. Jogadores sem partidas permanecem em calibração e não recebem posição.
             </p>
           </div>
 
@@ -367,7 +370,6 @@ export default function RankingPage() {
                 className="bg-transparent text-white font-medium focus:outline-none cursor-pointer pr-1"
               >
                 <option value="ELO" className="bg-[#12161a] text-white">Por ELO</option>
-                <option value="RATING" className="bg-[#12161a] text-white">Por HLTV Rating</option>
                 <option value="KD" className="bg-[#12161a] text-white">Por K/D</option>
                 <option value="WINRATE" className="bg-[#12161a] text-white">Por Win Rate</option>
                 <option value="MATCHES" className="bg-[#12161a] text-white">Por Partidas</option>
@@ -380,9 +382,13 @@ export default function RankingPage() {
         {/* ══════════════════════════════════════════════════════════════
             4. DEPOIS: TABELA COM O RESTANTE DAS POSIÇÕES (4+)
            ══════════════════════════════════════════════════════════════ */}
-        <div className="flex flex-col w-full">
+        <div className="flex w-full flex-col [contain-intrinsic-size:auto_900px] [content-visibility:auto]">
           
-          {activeTab === "PLAYERS" ? (
+          {activeRankingPending ? (
+            <RankingRequestState state="loading" />
+          ) : activeRankingError ? (
+            <RankingRequestState state="error" onRetry={() => void retryActiveRanking()} />
+          ) : activeTab === "PLAYERS" ? (
             /* Players Table */
             <div className="w-full overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -391,7 +397,6 @@ export default function RankingPage() {
                     <th className="py-3 px-3 w-16 text-center">#</th>
                     <th className="py-3 px-4">Operador</th>
                     <th className="py-3 px-4 text-center">ELO</th>
-                    <th className="py-3 px-4 text-center">HLTV Rating</th>
                     <th className="py-3 px-4 text-center">K/D</th>
                     <th className="py-3 px-4 text-center">Win Rate</th>
                     <th className="py-3 px-4 text-right pr-6">Partidas</th>
@@ -424,11 +429,12 @@ export default function RankingPage() {
                             <Avatar 
                               src={player.avatarUrl} 
                               username={player.username} 
+                              kurageId={player.kurageId}
                               size="sm" 
                               isVerifiedPro={player.isVerifiedPro} 
                             />
                             <div className="flex items-center gap-2">
-                              <span className="text-[14px] font-sans font-medium text-white group-hover/link:text-[#a9c8c0] transition-colors">
+                              <span className="text-[14px] font-sans font-medium text-white group-hover/link:text-[var(--kurage-accent)] transition-colors">
                                 {player.username}
                               </span>
                               <CountryFlag country={player.country} expandOnHover={true} />
@@ -444,19 +450,10 @@ export default function RankingPage() {
                           {player.kurageElo}
                         </td>
 
-                        {/* HLTV Rating */}
-                        <td className="py-3.5 px-4 text-center font-sans font-bold text-[13px] tabular-nums">
-                          <span className={cn(
-                            (player.hltvRating || 0) >= 1.30 ? "text-[#a9c8c0]" : (player.hltvRating || 0) >= 1.05 ? "text-white" : "text-stone-400"
-                          )}>
-                            {player.hltvRating ? player.hltvRating.toFixed(2) : "-"}
-                          </span>
-                        </td>
-
                         {/* K/D */}
                         <td className="py-3.5 px-4 text-center font-sans font-medium text-[13px] tabular-nums">
                           <span className={cn(
-                            (player.kdRatio || 0) >= 1.3 ? "text-[#a9c8c0]" : (player.kdRatio || 0) >= 1.0 ? "text-stone-300" : "text-stone-400"
+                            (player.kdRatio || 0) >= 1.3 ? "text-[var(--kurage-accent)]" : (player.kdRatio || 0) >= 1.0 ? "text-stone-300" : "text-stone-400"
                           )}>
                             {player.kdRatio ? player.kdRatio.toFixed(2) : "-"}
                           </span>
@@ -518,7 +515,7 @@ export default function RankingPage() {
                             className="flex items-center gap-3 group/link w-fit"
                           >
                             <TeamLogo teamTag={team.tag} logoUrl={team.logoUrl} size={24} isLink={false} />
-                            <span className="text-[14px] font-sans font-medium text-white group-hover/link:text-[#a9c8c0] transition-colors">
+                            <span className="text-[14px] font-sans font-medium text-white group-hover/link:text-[var(--kurage-accent)] transition-colors">
                               {team.name}
                             </span>
                           </Link>
@@ -576,6 +573,40 @@ export default function RankingPage() {
   );
 }
 
+function RankingRequestState({
+  state,
+  onRetry,
+}: {
+  state: "loading" | "error";
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="flex min-h-[280px] w-full flex-col items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.02] px-6 text-center">
+      {state === "loading" ? (
+        <>
+          <PiSpinnerGap className="mb-4 h-7 w-7 animate-spin text-[var(--kurage-accent)]" aria-hidden />
+          <p className="text-[14px] text-body">Buscando a classificação oficial...</p>
+        </>
+      ) : (
+        <>
+          <PiWarningCircle className="mb-4 h-8 w-8 text-[#d7a57f]" aria-hidden />
+          <h2 className="font-display text-[20px] font-semibold text-white">Ranking temporariamente indisponível</h2>
+          <p className="mt-2 max-w-md text-[13px] leading-relaxed text-mute">
+            Não foi possível confirmar os dados com o servidor. Nenhuma classificação vazia foi presumida.
+          </p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-5 rounded-[8px] border border-white/[0.1] bg-white/[0.06] px-4 py-2 text-[12px] font-medium text-white transition-colors hover:bg-white/[0.1]"
+          >
+            Tentar novamente
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── FLOATING PLAYER DETAILS (EXACT SAME COMPONENT AS HOME) ──
 interface FloatingPlayerDetailsProps {
   player: LeaderboardPlayer;
@@ -585,7 +616,7 @@ interface FloatingPlayerDetailsProps {
 }
 
 function FloatingPlayerDetails({ player, rank, tier, delay }: FloatingPlayerDetailsProps) {
-  const eloValue = player.kurageElo ?? 2000;
+  const eloValue = player.kurageElo;
 
   const tierStyles = {
     gold: {
@@ -627,6 +658,7 @@ function FloatingPlayerDetails({ player, rank, tier, delay }: FloatingPlayerDeta
         <Avatar
           src={player.avatarUrl}
           username={player.username}
+          kurageId={player.kurageId}
           size={rank === 1 ? "xl" : "lg"}
           className={tierStyles.avatarRing}
         />
@@ -659,8 +691,6 @@ function FloatingPlayerDetails({ player, rank, tier, delay }: FloatingPlayerDeta
 
       {/* 5. Minimal Floating Stats Line */}
       <div className="mt-4 flex items-center justify-center gap-3 text-[12px] font-sans text-body">
-        <span><strong className="text-[#a9c8c0]">{player.hltvRating ? player.hltvRating.toFixed(2) : "-"}</strong> Rating</span>
-        <span className="text-stone-600">·</span>
         <span><strong className="text-white">{player.kdRatio ? player.kdRatio.toFixed(2) : "-"}</strong> K/D</span>
         <span className="text-stone-600">·</span>
         <span><strong className="text-white">{player.winRate != null ? `${player.winRate.toFixed(0)}%` : "-"}</strong> WR</span>

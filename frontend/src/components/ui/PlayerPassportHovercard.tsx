@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,17 +14,27 @@ import { Avatar } from "@/components/ui/Avatar";
 import { CountryFlag } from "@/components/ui/CountryFlag";
 import { RoleIcon } from "@/components/ui/RoleIcon";
 import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
-import { FaceitLevelIcon } from "@/components/ui/faceit-levels/FaceitLevelIcon";
 import { TeamLogo } from "@/components/ui/TeamLogo";
+import { VerifiedProBadge } from "@/components/ui/VerifiedProBadge";
 import type { HovercardData } from "@/types/hovercard";
-import type { UserWithStats, InGameFunction } from "@/types/user";
+import type { UserWithStats, InGameFunction, PlayerStats } from "@/types/user";
+
+type PassportInitialData = Partial<HovercardData> &
+  Partial<UserWithStats> & {
+    matches?: number;
+    teamTag?: string | null;
+    teamName?: string | null;
+    stats?: Partial<PlayerStats> & { kdRatio?: number; winRate?: number };
+  };
+
+const subscribeToClient = () => () => undefined;
 
 interface PlayerPassportHovercardProps {
   children: React.ReactNode;
   kurageId?: number | string | null;
   username?: string;
   avatarUrl?: string | null;
-  initialData?: Partial<HovercardData | UserWithStats>;
+  initialData?: PassportInitialData;
   enabled?: boolean;
 }
 
@@ -38,7 +48,7 @@ export function PlayerPassportHovercard({
 }: PlayerPassportHovercardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeToClient, () => true, () => false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [coords, setCoords] = useState<{
     top: number;
@@ -55,10 +65,6 @@ export function PlayerPassportHovercard({
   const openTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // ── Smart Viewport & Header Boundary Calculation via Fixed Screen Coordinates ──
   const updatePosition = useCallback(() => {
@@ -148,69 +154,74 @@ export function PlayerPassportHovercard({
   // ── High Performance Cache via TanStack Query ──
   const numericKurageId = typeof kurageId === "number" ? kurageId : (typeof kurageId === "string" && /^\d+$/.test(kurageId) ? Number(kurageId) : undefined);
 
-  const { data: remoteData } = useQuery<HovercardData>({
-    queryKey: ["playerHovercard", numericKurageId || username],
+  const hovercardUsername = username.trim();
+  const canFetchHovercard = Boolean(numericKurageId || (hovercardUsername && hovercardUsername !== "Jogador"));
+
+  const { data: remoteData } = useQuery<HovercardData | null>({
+    queryKey: ["playerHovercard", numericKurageId ?? hovercardUsername],
     queryFn: async () => {
       try {
         if (numericKurageId) {
-          const res = await api.get<HovercardData>(`/users/${numericKurageId}/hovercard`);
-          return res;
+          return await api.get<HovercardData>(`/users/${numericKurageId}/hovercard`);
         }
+        return await api.get<HovercardData>("/users/hovercard", {
+          params: { username: hovercardUsername },
+        });
       } catch {
-        // Fallback gracefully
+        // Keep the compact card available when this optional public lookup fails.
+        // Do not manufacture profile data locally.
       }
-      return null as any;
+      return null;
     },
-    enabled: isOpen && Boolean(numericKurageId),
+    enabled: isOpen && canFetchHovercard,
     staleTime: 1000 * 60 * 5, // 5 minutes fresh cache
     gcTime: 1000 * 60 * 30, // 30 minutes in memory
   });
 
   // Consolidated real data resolution
-  const resolvedKurageId = numericKurageId || remoteData?.kurageId || (initialData as any)?.kurageId || null;
-  const matchesPlayed = remoteData?.matchesPlayed ?? (initialData as any)?.stats?.matchesPlayed ?? (initialData as any)?.matches ?? 0;
+  const resolvedKurageId = numericKurageId || remoteData?.kurageId || initialData?.kurageId || null;
+  const matchesPlayed = remoteData?.matchesPlayed ?? initialData?.stats?.matchesPlayed ?? initialData?.matches ?? 0;
   const isUncalibrated = matchesPlayed === 0;
 
   const resolvedUsername = remoteData?.username || initialData?.username || username;
   const resolvedAvatar = remoteData?.avatarUrl !== undefined ? remoteData.avatarUrl : (initialData?.avatarUrl !== undefined ? initialData.avatarUrl : avatarUrl);
-  const resolvedCountry = remoteData?.country || (initialData as any)?.country || null;
-  const resolvedLevel = remoteData?.kurageLevel ?? (initialData as any)?.stats?.kurageLevel ?? (initialData as any)?.kurageLevel ?? 1;
-  const resolvedElo = remoteData?.kurageElo ?? (initialData as any)?.stats?.kurageElo ?? (initialData as any)?.kurageElo ?? 200;
-  const resolvedRole = (remoteData?.primaryFunction || (initialData as any)?.primaryFunction || null) as InGameFunction | null;
-  const resolvedTeamTag = remoteData?.teamTag || (initialData as any)?.teamTag || null;
-  const resolvedTeamName = remoteData?.teamName || (initialData as any)?.teamName || null;
-  const resolvedIsPro = remoteData?.isVerifiedPro ?? (initialData as any)?.isVerifiedPro ?? false;
+  const resolvedCountry = remoteData?.country || initialData?.country || null;
+  const resolvedLevel = remoteData?.kurageLevel ?? initialData?.stats?.kurageLevel ?? initialData?.kurageLevel ?? null;
+  const resolvedElo = remoteData?.kurageElo ?? initialData?.stats?.kurageElo ?? initialData?.kurageElo ?? null;
+  const resolvedRole = (remoteData?.primaryFunction || initialData?.primaryFunction || null) as InGameFunction | null;
+  const resolvedTeamTag = remoteData?.teamTag || initialData?.teamTag || null;
+  const resolvedTeamName = remoteData?.teamName || initialData?.teamName || null;
+  const resolvedIsPro = remoteData?.isVerifiedPro ?? initialData?.isVerifiedPro ?? false;
+  const resolvedSubscriptionTier = remoteData?.subscriptionTier ?? initialData?.subscriptionTier ?? "FREE";
 
   // Real statistics formatting without mock defaults
   let displayRating = "-";
   if (!isUncalibrated) {
-    const rawRating = remoteData?.hltvRating ?? (initialData as any)?.stats?.hltvRating;
+    const rawRating = remoteData?.hltvRating ?? initialData?.stats?.hltvRating;
     if (rawRating !== null && rawRating !== undefined && rawRating > 0) {
       displayRating = Number(rawRating).toFixed(2);
-    } else {
-      displayRating = "1.00";
     }
   }
 
   let displayKd = "-";
   if (!isUncalibrated) {
-    const rawKd = remoteData?.kdRatio ?? (initialData as any)?.stats?.kdRatio;
+    const rawKd = remoteData?.kdRatio ?? initialData?.stats?.kdRatio;
     if (rawKd !== null && rawKd !== undefined) {
       displayKd = Number(rawKd).toFixed(2);
-    } else if ((initialData as any)?.stats && (initialData as any).stats.deaths > 0) {
-      displayKd = ((initialData as any).stats.kills / (initialData as any).stats.deaths).toFixed(2);
-    } else if ((initialData as any)?.stats?.kills > 0) {
-      displayKd = `${(initialData as any).stats.kills}.00`;
+    } else if (initialData?.stats && (initialData.stats.deaths ?? 0) > 0) {
+      displayKd = ((initialData.stats.kills ?? 0) / (initialData.stats.deaths ?? 1)).toFixed(2);
+    } else if ((initialData?.stats?.kills ?? 0) > 0) {
+      displayKd = `${initialData?.stats?.kills}.00`;
     }
   }
 
   let displayWinRate = "-";
   if (!isUncalibrated) {
-    const rawWr = remoteData?.winRate ?? (initialData as any)?.stats?.winRate;
+    const rawWr = remoteData?.winRate ?? initialData?.stats?.winRate;
     if (rawWr !== null && rawWr !== undefined) {
       displayWinRate = `${rawWr}%`;
-    } else if ((initialData as any)?.stats && matchesPlayed > 0) {
-      displayWinRate = `${Math.round(((initialData as any).stats.matchesWon / matchesPlayed) * 100)}%`;
+    } else if (initialData?.stats && matchesPlayed > 0) {
+      displayWinRate = `${Math.round(((initialData.stats.matchesWon ?? 0) / matchesPlayed) * 100)}%`;
     }
   }
 
@@ -270,22 +281,22 @@ export function PlayerPassportHovercard({
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             onMouseMove={handleCardMouseMove}
             style={{ transformStyle: "preserve-3d" }}
-            className="w-[230px] rounded-[12px] bg-[#07080a]/98 backdrop-blur-2xl border border-white/[0.08] shadow-[0_20px_50px_rgba(0,0,0,0.95),0_0_25px_rgba(169,200,192,0.06)] overflow-hidden select-none flex flex-col items-center pt-4 pb-3 text-center"
+            className="w-[230px] rounded-[12px] bg-[#07080a]/98 backdrop-blur-2xl border border-white/[0.08] shadow-[0_20px_50px_rgba(0,0,0,0.95),0_0_25px_rgba(var(--kurage-accent-rgb),0.06)] overflow-hidden select-none flex flex-col items-center pt-4 pb-3 text-center"
           >
             {/* ── 1. BIOLUMINESCENT ATMOSPHERIC AURA ── */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[12px]">
               <div
                 className="absolute top-2 left-1/2 -translate-x-1/2 w-36 h-36 opacity-25 blur-2xl pointer-events-none"
                 style={{
-                  background: "radial-gradient(circle, #a9c8c0 0%, #92bce3 45%, transparent 75%)",
+                  background: "radial-gradient(circle, var(--kurage-accent) 0%, #92bce3 45%, transparent 75%)",
                 }}
               />
-              <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[#a9c8c0]/40 to-transparent" />
+              <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[var(--kurage-accent)]/40 to-transparent" />
             </div>
 
             {/* ── 2. PASSPORT DISCREET ID ── */}
             <div className="relative z-10 w-full px-3.5 mb-1.5 flex items-center justify-between text-[9px] font-mono text-mute/70">
-              <span className="uppercase tracking-widest text-[#a9c8c0]/80 font-semibold text-[8px]">
+              <span className="uppercase tracking-widest text-[var(--kurage-accent)]/80 font-semibold text-[8px]">
                 Passaporte
               </span>
               {resolvedKurageId ? (
@@ -324,6 +335,9 @@ export function PlayerPassportHovercard({
               <span className="font-display text-[18px] font-bold text-white tracking-tight truncate max-w-[200px] leading-tight">
                 {resolvedUsername}
               </span>
+              {resolvedSubscriptionTier === "MARE" && (
+                <VerifiedProBadge subscriptionTier="MARE" size="sm" className="mt-2" />
+              )}
 
               {/* Badges: Country, Role, Level, Team */}
               <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
@@ -333,7 +347,7 @@ export function PlayerPassportHovercard({
                   <RoleIcon role={resolvedRole} size={14} expandOnHover={true} />
                 )}
 
-                {resolvedLevel > 0 && (
+                {resolvedLevel !== null && resolvedLevel > 0 && (
                   <KurageLevelIcon level={resolvedLevel} expandOnHover={true} />
                 )}
 
@@ -353,8 +367,8 @@ export function PlayerPassportHovercard({
             <div className="relative z-10 w-[206px] mt-3.5 py-1.5 px-1 rounded-[6px] bg-white/[0.02] border border-white/[0.06] grid grid-cols-4 gap-1 text-center">
               <div className="flex flex-col">
                 <span className="text-[8px] font-sans font-semibold uppercase tracking-wider text-mute">ELO</span>
-                <span className="font-display text-[15px] font-bold text-[#a9c8c0] leading-tight mt-0.5">
-                  {resolvedElo}
+                <span className="font-display text-[15px] font-bold text-[var(--kurage-accent)] leading-tight mt-0.5">
+                  {!isUncalibrated && resolvedElo !== null ? resolvedElo : "—"}
                 </span>
               </div>
 

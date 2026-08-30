@@ -1,5 +1,6 @@
 package com.kurage.api.service;
 
+import com.kurage.api.config.TransactionHooks;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kurage.api.domain.PlayerFunction;
@@ -8,14 +9,18 @@ import com.kurage.api.domain.Team;
 import com.kurage.api.domain.TeamInvitation;
 import com.kurage.api.domain.User;
 import com.kurage.api.domain.UserFaceit;
+import com.kurage.api.dto.request.AvatarCropRequest;
 import com.kurage.api.dto.request.CreateUserRequest;
 import com.kurage.api.dto.response.FaceitResponse;
 import com.kurage.api.dto.response.HovercardResponse;
 import com.kurage.api.dto.response.PlayerStatsResponse;
 import com.kurage.api.dto.response.TeamInvitationResponse;
 import com.kurage.api.dto.response.TeamResponse;
+import com.kurage.api.dto.response.UserContactResponse;
 import com.kurage.api.dto.response.UserResponse;
+import com.kurage.api.dto.response.SteamAvatarSourceResponse;
 import com.kurage.api.repository.PlayerStatsRepository;
+import com.kurage.api.repository.RankingSnapshotRepository;
 import com.kurage.api.repository.TeamInvitationRepository;
 import com.kurage.api.repository.TeamRepository;
 import com.kurage.api.repository.UserFaceitRepository;
@@ -27,26 +32,44 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
+    private static final Pattern E164_PHONE_PATTERN = Pattern.compile("^\\+[1-9]\\d{7,14}$");
+    private static final long MAX_STEAM_AVATAR_BYTES = 5L * 1024 * 1024;
+    private static final int CROPPED_AVATAR_SIZE = 512;
+
     private final UserRepository userRepository;
     private final UserFaceitRepository userFaceitRepository;
     private final PlayerStatsRepository playerStatsRepository;
+    private final RankingSnapshotRepository rankingSnapshotRepository;
     private final TeamRepository teamRepository;
     private final TeamInvitationRepository teamInvitationRepository;
     private final FaceitService faceitService;
@@ -56,6 +79,9 @@ public class UserService {
     private final ProfileVisitService profileVisitService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient avatarHttpClient = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .build();
 
     public Long generateKurageId() {
         try {
@@ -121,13 +147,24 @@ public class UserService {
 
     public UserResponse buildUserResponse(User target) {
         if (target == null) return null;
-        PlayerStatsResponse stats = playerStatsRepository.findById(target.getId())
-                .map(PlayerStatsResponse::create)
-                .orElse(null);
+        Optional<PlayerStats> playerStats = playerStatsRepository.findById(target.getId());
+        PlayerStatsResponse stats = playerStats.map(PlayerStatsResponse::create).orElse(null);
+        Integer rankPosition = null;
+        Integer rankDelta = null;
+        if (playerStats.isPresent() && playerStats.get().getMatchesPlayed() != null
+                && playerStats.get().getMatchesPlayed() > 0) {
+            PlayerStats persistedStats = playerStats.get();
+            rankPosition = playerStatsRepository.findLeaderboardPosition(persistedStats.getKurageElo());
+            int currentPosition = rankPosition;
+            rankDelta = rankingSnapshotRepository
+                    .findByUserIdAndSnapshotDate(target.getId(), LocalDate.now().minusDays(1))
+                    .map(snapshot -> snapshot.getPosition() - currentPosition)
+                    .orElse(null);
+        }
         Integer faceitLevel = userFaceitRepository.findById(target.getId())
                 .map(UserFaceit::getLevel)
                 .orElse(null);
-        return UserResponse.create(target, stats, faceitLevel, null, null);
+        return UserResponse.create(target, stats, faceitLevel, rankPosition, rankDelta);
     }
 
     public Optional<UserResponse> getUserBySteamId(String steamId64, User currentUser) {
@@ -323,7 +360,7 @@ public class UserService {
                 matchesPlayed,
                 hltvRating,
                 user.isVerifiedPro(),
-                user.getSubscriptionTier() != null ? user.getSubscriptionTier().name() : "FREE"
+                user.getEffectiveSubscriptionTier().name()
         );
 
         try {
@@ -337,16 +374,24 @@ public class UserService {
         return Optional.of(response);
     }
 
+    @Transactional(readOnly = true)
+    public Optional<HovercardResponse> getHovercardByUsername(String username) {
+        if (username == null || username.isBlank()) {
+            return Optional.empty();
+        }
+
+        return userRepository.findByUsernameIgnoreCase(username.trim())
+                .flatMap(user -> getHovercard(user.getKurageId()));
+    }
+
     @Transactional
-    public User getOrCreateUser(String steamId64, String nickname, String avatarUrl, String clientIp, String cfCountry) {
+    public User getOrCreateUser(String steamId64, String nickname, String avatarUrl, String cfCountry) {
         Optional<User> existing = userRepository.findBySteamId64(steamId64);
         if (existing.isPresent()) {
             return existing.get();
         }
 
-        String initialCountry = (cfCountry != null && !cfCountry.trim().isEmpty() && !cfCountry.equals("XX"))
-                ? cfCountry
-                : fetchCountryFromIp(clientIp);
+        String initialCountry = normalizeEdgeCountry(cfCountry);
 
         // Tenta salvar com retry caso ocorra colisão rara de kurageId ou corrida de cadastro
         int maxRetries = 3;
@@ -419,28 +464,10 @@ public class UserService {
         return savedUser;
     }
 
-    private String fetchCountryFromIp(String ip) {
-        if (ip == null || ip.equals("127.0.0.1") || ip.equals("0:0:0:0:0:0:0:1") || ip.startsWith("192.168.") || ip.startsWith("10.")) {
-            return "BR";
-        }
-        try {
-            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                    .uri(java.net.URI.create("http://ip-api.com/json/" + ip + "?fields=countryCode"))
-                    .timeout(Duration.ofSeconds(2))
-                    .GET()
-                    .build();
-            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(response.body());
-                if (root.has("countryCode") && !root.get("countryCode").isNull()) {
-                    return root.get("countryCode").asText();
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Falha ao buscar país pelo IP {}: {}", ip, e.getMessage());
-        }
-        return "BR";
+    static String normalizeEdgeCountry(String country) {
+        if (country == null) return null;
+        String normalized = country.trim().toUpperCase(Locale.ROOT);
+        return normalized.matches("[A-Z]{2}") && !"XX".equals(normalized) ? normalized : null;
     }
 
     public Optional<User> getBySteamId64(String steamId64) {
@@ -455,13 +482,117 @@ public class UserService {
         return buildUserResponse(savedUser);
     }
 
-    public UserResponse updateAvatar(User transientUser, MultipartFile file) throws IOException {
+    public UserResponse updateAvatar(User transientUser, MultipartFile file) {
         User user = userRepository.findById(transientUser.getId()).orElseThrow();
+        String previousAvatarUrl = user.getAvatarUrl();
         String avatarUrl = s3Service.uploadAvatar(file, user.getId());
-        user.setAvatarUrl(avatarUrl);
-        User savedUser = userRepository.save(user);
+        User savedUser;
+        try {
+            user.setAvatarUrl(avatarUrl);
+            savedUser = userRepository.save(user);
+        } catch (RuntimeException exception) {
+            s3Service.deleteImageIfOwned(avatarUrl);
+            throw exception;
+        }
+        TransactionHooks.afterCommit(() -> s3Service.deleteImageIfOwned(previousAvatarUrl));
         invalidateProfileCache(savedUser);
         return buildUserResponse(savedUser);
+    }
+
+    public SteamAvatarSourceResponse getSteamAvatarSource(User transientUser) {
+        User user = userRepository.findById(transientUser.getId()).orElseThrow();
+        String avatarUrl = getVerifiedSteamAvatarUrl(user);
+        return new SteamAvatarSourceResponse(avatarUrl);
+    }
+
+    public UserResponse updateAvatarFromSteam(User transientUser, AvatarCropRequest crop) {
+        User user = userRepository.findById(transientUser.getId()).orElseThrow();
+        String avatarUrl = getVerifiedSteamAvatarUrl(user);
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(avatarUrl))
+                    .timeout(Duration.ofSeconds(8))
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> response = avatarHttpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() != 200) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "A Steam não disponibilizou a imagem do avatar.");
+            }
+            if (response.body().length > MAX_STEAM_AVATAR_BYTES) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "A imagem recebida da Steam é grande demais.");
+            }
+
+            BufferedImage source = ImageIO.read(new ByteArrayInputStream(response.body()));
+            if (source == null || source.getWidth() < 1 || source.getHeight() < 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "A Steam retornou uma imagem de avatar inválida.");
+            }
+
+            BufferedImage cropped = cropAvatar(source, crop);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            if (!ImageIO.write(cropped, "png", output)) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível preparar a imagem do avatar.");
+            }
+
+            String previousAvatarUrl = user.getAvatarUrl();
+            String uploadedAvatarUrl = s3Service.uploadAvatar(output.toByteArray(), user.getId());
+            User savedUser;
+            try {
+                user.setAvatarUrl(uploadedAvatarUrl);
+                savedUser = userRepository.save(user);
+            } catch (RuntimeException exception) {
+                s3Service.deleteImageIfOwned(uploadedAvatarUrl);
+                throw exception;
+            }
+            TransactionHooks.afterCommit(() -> s3Service.deleteImageIfOwned(previousAvatarUrl));
+            invalidateProfileCache(savedUser);
+            return buildUserResponse(savedUser);
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "A busca do avatar da Steam foi interrompida.", exception);
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Não foi possível processar o avatar fornecido pela Steam.", exception);
+        }
+    }
+
+    private String getVerifiedSteamAvatarUrl(User user) {
+        com.kurage.api.dto.response.SteamProfileResponse.Player steamPlayer = steamAuthService.fetchSteamProfile(user.getSteamId64());
+        String avatarUrl = steamPlayer != null ? steamPlayer.avatarfull() : null;
+        if (avatarUrl == null || avatarUrl.isBlank() || !isSteamStaticUrl(avatarUrl)) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Não foi possível obter um avatar válido da Steam.");
+        }
+        return avatarUrl;
+    }
+
+    private boolean isSteamStaticUrl(String value) {
+        try {
+            URI uri = URI.create(value);
+            String host = uri.getHost();
+            return "https".equalsIgnoreCase(uri.getScheme())
+                    && host != null
+                    && (host.equals("steamstatic.com") || host.endsWith(".steamstatic.com"));
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private BufferedImage cropAvatar(BufferedImage source, AvatarCropRequest crop) {
+        int shortestSide = Math.min(source.getWidth(), source.getHeight());
+        int cropSize = Math.max(1, (int) Math.round(shortestSide / crop.zoom()));
+        int maxLeft = source.getWidth() - cropSize;
+        int maxTop = source.getHeight() - cropSize;
+        int left = (int) Math.round(maxLeft / 2.0 - crop.positionX() * maxLeft / 2.0);
+        int top = (int) Math.round(maxTop / 2.0 - crop.positionY() * maxTop / 2.0);
+
+        BufferedImage cropped = new BufferedImage(CROPPED_AVATAR_SIZE, CROPPED_AVATAR_SIZE, BufferedImage.TYPE_INT_ARGB);
+        var graphics = cropped.createGraphics();
+        try {
+            graphics.drawImage(source, 0, 0, CROPPED_AVATAR_SIZE, CROPPED_AVATAR_SIZE, left, top, left + cropSize, top + cropSize, null);
+        } finally {
+            graphics.dispose();
+        }
+        return cropped;
     }
 
     public UserResponse updateCountry(User transientUser, String country) {
@@ -470,6 +601,21 @@ public class UserService {
         User savedUser = userRepository.save(user);
         invalidateProfileCache(savedUser);
         return buildUserResponse(savedUser);
+    }
+
+    @Transactional
+    public UserContactResponse getContact(User transientUser) {
+        User user = userRepository.findById(transientUser.getId()).orElseThrow();
+        return UserContactResponse.from(user);
+    }
+
+    @Transactional
+    public UserContactResponse updateContact(User transientUser, String email, String phoneNumber) {
+        User user = userRepository.findById(transientUser.getId()).orElseThrow();
+        user.setEmail(normalizeEmail(email));
+        user.setPhoneE164(normalizePhoneNumber(phoneNumber));
+        User savedUser = userRepository.save(user);
+        return UserContactResponse.from(savedUser);
     }
 
     public UserResponse syncSteamProfile(User transientUser, String type) {
@@ -541,19 +687,43 @@ public class UserService {
 
     public void invalidateProfileCache(User user) {
         if (user == null) return;
-        try {
-            if (user.getSteamId64() != null) {
-                redisTemplate.delete("cache:profile:steam:" + user.getSteamId64());
-                redisTemplate.delete("cache:userteams:" + user.getSteamId64());
-                redisTemplate.delete("cache:userinvites:" + user.getSteamId64());
+        String steamId64 = user.getSteamId64();
+        Long kurageId = user.getKurageId();
+        TransactionHooks.afterCommit(() -> {
+            try {
+                if (steamId64 != null) {
+                    redisTemplate.delete("cache:profile:steam:" + steamId64);
+                    redisTemplate.delete("cache:userteams:" + steamId64);
+                    redisTemplate.delete("cache:userinvites:" + steamId64);
+                }
+                if (kurageId != null) {
+                    redisTemplate.delete("cache:profile:kurage:" + kurageId);
+                    redisTemplate.delete("cache:hovercard:" + kurageId);
+                }
+            } catch (Exception e) {
+                log.warn("Redis unavailable during cache invalidation: {}", e.getMessage());
             }
-            if (user.getKurageId() != null) {
-                redisTemplate.delete("cache:profile:kurage:" + user.getKurageId());
-                redisTemplate.delete("cache:hovercard:" + user.getKurageId());
-            }
-        } catch (Exception e) {
-            log.warn("Redis unavailable during cache invalidation: {}", e.getMessage());
+        });
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
         }
+        return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizePhoneNumber(String phoneNumber) {
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            return null;
+        }
+
+        String normalized = phoneNumber.trim().replaceAll("[\\s().-]", "");
+        if (!E164_PHONE_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException(
+                    "Informe o telefone com código do país no formato internacional, por exemplo +5585999999999.");
+        }
+        return normalized;
     }
 
     @Transactional(readOnly = true)

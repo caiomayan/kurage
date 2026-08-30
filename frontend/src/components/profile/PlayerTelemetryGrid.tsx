@@ -28,8 +28,8 @@ export function PlayerTelemetryGrid({
   const totalDamage = stats?.totalDamage ?? 0;
   const adr = rounds > 0 ? (totalDamage / rounds).toFixed(1) : "0.0";
 
-  const elo = stats?.kurageElo ?? 2000;
-  const peak = peakElo ?? elo;
+  const elo = matches > 0 ? stats?.kurageElo ?? null : null;
+  const peak = elo != null ? peakElo ?? elo : null;
 
   return (
     <div className="h-full rounded-[24px] bg-[#060a0d]/90 backdrop-blur-2xl border border-white/[0.08] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col justify-between overflow-hidden relative transition-all duration-300 hover:border-white/[0.16]">
@@ -55,11 +55,11 @@ export function PlayerTelemetryGrid({
           <span className="text-[11px] font-sans font-semibold uppercase tracking-wider text-mute">
             Rating ELO
           </span>
-          <span className="font-mono text-[30px] sm:text-[36px] font-black text-[#a9c8c0] leading-tight tracking-tight mt-1">
-            {elo}
+          <span className="font-mono text-[30px] sm:text-[36px] font-black text-[var(--kurage-accent)] leading-tight tracking-tight mt-1">
+            {elo ?? "—"}
           </span>
           <span className="text-[11px] font-sans text-stone-500 mt-1">
-            Pico: <strong className="text-stone-300 font-mono">{peak}</strong>
+            {peak != null ? <>Pico: <strong className="text-stone-300 font-mono">{peak}</strong></> : "Em calibração"}
           </span>
         </div>
 

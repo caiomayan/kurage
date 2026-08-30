@@ -1,28 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  PiUsers,
   PiCopy,
   PiCheck,
   PiWarningCircle,
-  PiArrowRight,
   PiSkull,
   PiBomb,
   PiShieldCheck,
   PiClock,
   PiTrophy,
-  PiTarget,
-  PiCrosshair,
   PiFlame,
   PiLightning,
   PiWrench,
-  PiArrowsClockwise,
-  PiWaves,
   PiEye,
+  PiArrowLeft,
 } from "react-icons/pi";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
@@ -31,89 +26,92 @@ import { FaceitLevelIcon } from "@/components/ui/faceit-levels/FaceitLevelIcon";
 import { RoleIcon } from "@/components/ui/RoleIcon";
 import { TeamLogo } from "@/components/ui/TeamLogo";
 import { MergulharButton } from "@/components/ui/MergulharButton";
+import { FixedServerDirectory } from "@/components/servers/FixedServerDirectory";
 import { api } from "@/lib/api";
-import { mapServerPlayersToLiveStats } from "@/lib/serverTelemetry";
+import {
+  expireStaleServers,
+  gameServerToLiveState,
+  type GameServerWithPlayers,
+} from "@/lib/game-servers";
 import type {
-  ServerGameMode,
   RoundResult,
   RoundWinReason,
   PlayerLiveStats,
   LiveServerState,
   SpectatorInfo,
-  CoachInfo,
-  WarmupState,
 } from "@/types/server";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-const OFFLINE_SERVER_STATE: LiveServerState = {
-  ip: "play.kurage.caiomayan.com",
-  map: "de_mirage",
-  mode: "COMPETITIVO",
-  tickrate: 128,
-  status: "offline",
-  maxPlayers: 10,
-  ctScore: 0,
-  trScore: 0,
-  ctPlayers: [],
-  trPlayers: [],
-  spectators: [],
-};
-
 export default function MarAbertoPage() {
   const [activeMode, setActiveMode] = useState<string>("OFFLINE");
   const [serverState, setServerState] = useState<LiveServerState | null>(null);
+  const [servers, setServers] = useState<GameServerWithPlayers[]>([]);
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const serversRef = useRef<GameServerWithPlayers[]>([]);
+
+  useEffect(() => {
+    const syncSelectionFromUrl = () => {
+      setSelectedServerId(new URLSearchParams(window.location.search).get("server"));
+    };
+
+    syncSelectionFromUrl();
+    window.addEventListener("popstate", syncSelectionFromUrl);
+    return () => window.removeEventListener("popstate", syncSelectionFromUrl);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
     async function fetchServerTelemetry() {
       try {
-        const servers = await api.get<any[]>("/servers");
+        const response = await api.get<GameServerWithPlayers[]>("/servers");
         if (isMounted) {
-          if (Array.isArray(servers) && servers.length > 0) {
-            const activeServer = servers.find((s) => s.isOnline);
-            if (activeServer && activeServer.isOnline) {
-              const rawMode = String(activeServer.gameMode || "").toUpperCase();
-              let mode: ServerGameMode = "COMPETITIVO";
-              if (rawMode.includes("RETAKE")) mode = "RETAKE";
-              else if (rawMode.includes("DM") || rawMode.includes("DEATHMATCH"))
-                mode = "DEATHMATCH";
-              else if (rawMode.includes("PRACTICE")) mode = "PRACTICE";
-              else mode = "COMPETITIVO";
+          const nextServers = expireStaleServers(
+            Array.isArray(response) ? response : [],
+          );
+          serversRef.current = nextServers;
+          setServers(nextServers);
+          setLoadError(false);
 
-              const { ctPlayers, trPlayers } = mapServerPlayersToLiveStats(
-                activeServer.players ?? [],
-              );
-
-              const liveState: LiveServerState = {
-                ip: `connect ${activeServer.hostname || "play.kurage.caiomayan.com"}:${activeServer.port || 27015}`,
-                map: activeServer.currentMap || "de_mirage",
-                mode,
-                tickrate: 128,
-                status: activeServer.currentPlayers > 0 ? "live" : "warmup",
-                maxPlayers: activeServer.maxPlayers || 10,
-                ctScore: 0,
-                trScore: 0,
-                ctPlayers,
-                trPlayers,
-              };
+          if (selectedServerId) {
+            const selected = nextServers.find(
+              (server) =>
+                server.id === selectedServerId && server.serverKind === "FIXED",
+            );
+            if (selected) {
+              const liveState = gameServerToLiveState(selected);
               setServerState(liveState);
-              setActiveMode(mode);
+              setActiveMode(liveState.mode);
             } else {
-              setServerState(OFFLINE_SERVER_STATE);
+              setServerState(null);
               setActiveMode("OFFLINE");
             }
           } else {
-            setServerState(OFFLINE_SERVER_STATE);
+            setServerState(null);
             setActiveMode("OFFLINE");
           }
         }
       } catch {
         if (isMounted) {
-          setServerState(OFFLINE_SERVER_STATE);
-          setActiveMode("OFFLINE");
+          const nextServers = expireStaleServers(serversRef.current);
+          serversRef.current = nextServers;
+          setServers(nextServers);
+
+          if (selectedServerId) {
+            const selected = nextServers.find(
+              (server) =>
+                server.id === selectedServerId && server.serverKind === "FIXED",
+            );
+            if (selected) {
+              const liveState = gameServerToLiveState(selected);
+              setServerState(liveState);
+              setActiveMode(liveState.mode);
+            }
+          }
+          setLoadError(true);
         }
       } finally {
         if (isMounted) {
@@ -128,7 +126,22 @@ export default function MarAbertoPage() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [selectedServerId]);
+
+  const handleSelectServer = (serverId: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("server", serverId);
+    window.history.pushState({}, "", url);
+    setSelectedServerId(serverId);
+  };
+
+  const handleBackToServers = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("server");
+    window.history.pushState({}, "", url);
+    setSelectedServerId(null);
+    setServerState(null);
+  };
 
   const handleCopy = () => {
     if (serverState) {
@@ -138,12 +151,23 @@ export default function MarAbertoPage() {
     }
   };
 
+  if (!selectedServerId) {
+    return (
+      <MarServerDirectory
+        servers={servers}
+        isLoading={isLoading}
+        loadError={loadError}
+        onSelect={handleSelectServer}
+      />
+    );
+  }
+
   return (
     <div className="relative w-full flex flex-col font-sans min-h-screen bg-canvas overflow-hidden">
       {/* ── BACKGROUND MAP WITH DEEP-SEA GRADIENT MASKS ── */}
       <div className="fixed inset-0 z-0 pointer-events-none w-full h-full overflow-hidden select-none">
         <AnimatePresence mode="wait">
-          {serverState && (
+          {serverState?.map && (
             <motion.div
               key={serverState.map}
               initial={{ opacity: 0, scale: 1.08 }}
@@ -182,7 +206,7 @@ export default function MarAbertoPage() {
           className="absolute left-[-5%] top-[10%] h-[600px] w-[110%] rounded-full mix-blend-screen blur-3xl opacity-50"
           style={{
             background:
-              "radial-gradient(ellipse at center, rgba(169, 200, 192, 0.3) 0%, rgba(146, 188, 227, 0.12) 50%, transparent 75%)",
+              "radial-gradient(ellipse at center, rgba(var(--kurage-accent-rgb),0.3) 0%, rgba(146, 188, 227, 0.12) 50%, transparent 75%)",
           }}
         />
       </div>
@@ -193,6 +217,14 @@ export default function MarAbertoPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-6 border-b border-white/[0.08] pb-8">
           {/* Left: Server Identity */}
           <div className="flex flex-col">
+            <button
+              type="button"
+              onClick={handleBackToServers}
+              className="mb-5 flex w-fit items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] text-mute transition hover:text-white"
+            >
+              <PiArrowLeft size={15} aria-hidden />
+              Todos os servidores
+            </button>
             <div className="flex items-center gap-3.5">
               <h1 className="font-display text-[48px] sm:text-[60px] leading-none tracking-tight text-white">
                 O Mar.
@@ -276,7 +308,7 @@ export default function MarAbertoPage() {
         {/* ── MODE SPECIFIC TELEMETRY RENDERERS ── */}
         {isLoading ? (
           <div className="w-full h-[450px] flex flex-col items-center justify-center text-mute gap-4 animate-pulse">
-            <div className="w-7 h-7 rounded-full border-2 border-mute/30 border-t-[#a9c8c0] animate-spin" />
+            <div className="w-7 h-7 rounded-full border-2 border-mute/30 border-t-[var(--kurage-accent)] animate-spin" />
             <span className="text-[11px] uppercase tracking-[0.2em] font-sans text-stone">
               Sincronizando modo {activeMode}...
             </span>
@@ -333,6 +365,63 @@ export default function MarAbertoPage() {
   );
 }
 
+function MarServerDirectory({
+  servers,
+  isLoading,
+  loadError,
+  onSelect,
+}: {
+  servers: GameServerWithPlayers[];
+  isLoading: boolean;
+  loadError: boolean;
+  onSelect: (serverId: string) => void;
+}) {
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-canvas font-sans">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_65%_10%,rgba(var(--kurage-accent-rgb),0.12),transparent_48%)]" />
+        <div className="absolute inset-x-0 top-0 h-[520px] bg-gradient-to-b from-[#0b1719]/60 to-transparent" />
+      </div>
+
+      <main className="relative z-10 mx-auto w-full max-w-7xl px-6 pb-28 pt-[120px] sm:pt-[145px]">
+        <header className="max-w-3xl border-b border-white/[0.08] pb-9">
+          <p className="text-[10px] font-medium uppercase tracking-[0.24em] text-mute">
+            Servidores oficiais
+          </p>
+          <h1 className="mt-3 font-display text-[50px] leading-none tracking-tight text-white sm:text-[66px]">
+            O Mar.
+          </h1>
+          <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-body">
+            Escolha uma corrente. Cada card representa um servidor fixo e mostra somente telemetria recebida pelo Kurage.Core.
+          </p>
+        </header>
+
+        <div className="mt-12">
+          {isLoading ? (
+            <div className="grid gap-8 lg:grid-cols-2">
+              {[0, 1].map((item) => (
+                <div key={item} className="space-y-4 animate-pulse">
+                  <div className="h-10 w-40 rounded bg-white/[0.04]" />
+                  <div className="h-[188px] rounded-[14px] border border-white/[0.06] bg-white/[0.025]" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <FixedServerDirectory servers={servers} onSelect={onSelect} />
+          )}
+        </div>
+
+        {loadError ? (
+          <div className="mt-6 flex items-center gap-2 text-[12px] text-[#d7a57f]">
+            <PiWarningCircle size={17} aria-hidden />
+            A API de servidores não respondeu. Os dados serão atualizados automaticamente quando a conexão voltar.
+          </div>
+        ) : null}
+      </main>
+    </div>
+  );
+}
+
 {
   /* ══════════════════════════════════════════════════════════════
     1. MODO COMPETITIVO (5v5 MR12)
@@ -382,7 +471,7 @@ function CompetitiveView({ serverState }: { serverState: LiveServerState }) {
           <div className="flex flex-col gap-1">
             {serverState.ctPlayers?.map((player) => (
               <PlayerRow
-                key={player.kurageId}
+                key={player.kurageId ?? player.steamId64 ?? player.username}
                 player={player}
                 isWarmup={isWarmup}
               />
@@ -399,6 +488,7 @@ function CompetitiveView({ serverState }: { serverState: LiveServerState }) {
                 <Avatar
                   src={serverState.ctCoach.avatarUrl}
                   username={serverState.ctCoach.username}
+                  kurageId={serverState.ctCoach.kurageId}
                   size="sm"
                   isVerifiedPro={serverState.ctCoach.isVerifiedPro}
                 />
@@ -557,7 +647,7 @@ function CompetitiveView({ serverState }: { serverState: LiveServerState }) {
           <div className="flex flex-col gap-1">
             {serverState.trPlayers?.map((player) => (
               <PlayerRow
-                key={player.kurageId}
+                key={player.kurageId ?? player.steamId64 ?? player.username}
                 player={player}
                 isWarmup={isWarmup}
               />
@@ -574,6 +664,7 @@ function CompetitiveView({ serverState }: { serverState: LiveServerState }) {
                 <Avatar
                   src={serverState.trCoach.avatarUrl}
                   username={serverState.trCoach.username}
+                  kurageId={serverState.trCoach.kurageId}
                   size="sm"
                   isVerifiedPro={serverState.trCoach.isVerifiedPro}
                 />
@@ -649,7 +740,10 @@ function RetakeView({ serverState }: { serverState: LiveServerState }) {
 
           <div className="flex flex-col gap-1">
             {serverState.ctPlayers?.map((player) => (
-              <PlayerRow key={player.kurageId} player={player} />
+              <PlayerRow
+                key={player.kurageId ?? player.steamId64 ?? player.username}
+                player={player}
+              />
             ))}
           </div>
         </div>
@@ -660,7 +754,9 @@ function RetakeView({ serverState }: { serverState: LiveServerState }) {
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent-red/10 border border-accent-red/30 mb-4 animate-pulse">
             <PiBomb className="w-3.5 h-3.5 text-accent-red" />
             <span className="text-[11px] font-sans font-bold uppercase tracking-widest text-accent-red">
-              Bombsite {serverState.activeBombsite || "A"} Plantada
+              {serverState.activeBombsite
+                ? `Bombsite ${serverState.activeBombsite} plantada`
+                : "Retake em andamento"}
             </span>
           </div>
 
@@ -708,7 +804,10 @@ function RetakeView({ serverState }: { serverState: LiveServerState }) {
 
           <div className="flex flex-col gap-1">
             {serverState.trPlayers?.map((player) => (
-              <PlayerRow key={player.kurageId} player={player} />
+              <PlayerRow
+                key={player.kurageId ?? player.steamId64 ?? player.username}
+                player={player}
+              />
             ))}
           </div>
         </div>
@@ -760,8 +859,8 @@ function DeathmatchView({ serverState }: { serverState: LiveServerState }) {
             Tempo Restante
           </span>
           <div className="flex items-center gap-2 text-[22px] font-display text-white">
-            <PiClock className="w-4 h-4 text-[#a9c8c0]" />
-            <span>{serverState.timeRemaining || "10:00"}</span>
+            <PiClock className="w-4 h-4 text-[var(--kurage-accent)]" />
+            <span>{serverState.timeRemaining || "--:--"}</span>
           </div>
         </div>
 
@@ -812,9 +911,9 @@ function DeathmatchView({ serverState }: { serverState: LiveServerState }) {
         {/* Players List */}
         <div className="flex flex-col divide-y divide-white/[0.03]">
           {serverState.ffaPlayers?.map((player, idx) => (
-            <Link
-              key={player.kurageId}
-              href={`/player/${player.kurageId}`}
+            <PlayerProfileLink
+              key={player.kurageId ?? player.steamId64 ?? player.username}
+              player={player}
               className={cn(
                 "group flex items-center justify-between px-4 py-3 transition-colors hover:bg-white/[0.04] rounded-[6px]",
                 idx === 0 && "bg-white/[0.02]",
@@ -841,13 +940,17 @@ function DeathmatchView({ serverState }: { serverState: LiveServerState }) {
                   <Avatar
                     src={player.avatarUrl}
                     username={player.username}
+                    kurageId={player.kurageId}
                     size="sm"
                     isVerifiedPro={player.isVerifiedPro}
+                    enableHovercard={Boolean(
+                      player.isKurageMember && player.kurageId,
+                    )}
                   />
                   <span className="text-[14px] font-sans font-medium text-ink group-hover:text-white transition-colors">
                     {player.username}
                   </span>
-                  {player.kurageLevel > 0 ? (
+                  {player.kurageLevel && player.kurageLevel > 0 ? (
                     <KurageLevelIcon
                       level={player.kurageLevel}
                       className="w-4 h-4 text-[9px]"
@@ -882,7 +985,7 @@ function DeathmatchView({ serverState }: { serverState: LiveServerState }) {
                   {player.ping}ms
                 </span>
               </div>
-            </Link>
+            </PlayerProfileLink>
           ))}
         </div>
       </div>
@@ -907,7 +1010,7 @@ function PracticeView({ serverState }: { serverState: LiveServerState }) {
       <div className="flex flex-col gap-6 border-b border-white/[0.08] pb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="p-2.5 rounded-lg bg-[#a9c8c0]/10 border border-[#a9c8c0]/20 text-[#a9c8c0]">
+            <div className="p-2.5 rounded-lg bg-[var(--kurage-accent)]/10 border border-[var(--kurage-accent)]/20 text-[var(--kurage-accent)]">
               <PiWrench className="w-5 h-5" />
             </div>
             <div className="flex flex-col">
@@ -916,7 +1019,7 @@ function PracticeView({ serverState }: { serverState: LiveServerState }) {
                   Treino de Granadas & Utilitários
                 </span>
                 <span className="text-stone-500">·</span>
-                <span className="text-[14px] font-sans font-medium text-[#a9c8c0] capitalize">
+                <span className="text-[14px] font-sans font-medium text-[var(--kurage-accent)] capitalize">
                   {serverState.map.replace("de_", "")}
                 </span>
               </div>
@@ -943,7 +1046,7 @@ function PracticeView({ serverState }: { serverState: LiveServerState }) {
               key={idx}
               className="px-2.5 py-1 rounded-[6px] bg-surface-card border border-white/[0.06] text-[11px] font-mono text-stone-300 flex items-center gap-1.5"
             >
-              <PiLightning className="w-3 h-3 text-[#a9c8c0]" />
+              <PiLightning className="w-3 h-3 text-[var(--kurage-accent)]" />
               {feat}
             </span>
           ))}
@@ -967,22 +1070,26 @@ function PracticeView({ serverState }: { serverState: LiveServerState }) {
 
         <div className="flex flex-col divide-y divide-white/[0.03]">
           {serverState.practicePlayers?.map((player) => (
-            <Link
-              key={player.kurageId}
-              href={`/player/${player.kurageId}`}
+            <PlayerProfileLink
+              key={player.kurageId ?? player.steamId64 ?? player.username}
+              player={player}
               className="group flex items-center justify-between px-4 py-3 transition-colors hover:bg-white/[0.04] rounded-[6px]"
             >
               <div className="flex items-center gap-3">
                 <Avatar
                   src={player.avatarUrl}
                   username={player.username}
+                  kurageId={player.kurageId}
                   size="sm"
                   isVerifiedPro={player.isVerifiedPro}
+                  enableHovercard={Boolean(
+                    player.isKurageMember && player.kurageId,
+                  )}
                 />
                 <span className="text-[14px] font-sans font-medium text-ink group-hover:text-white transition-colors">
                   {player.username}
                 </span>
-                {player.kurageLevel > 0 ? (
+                {player.kurageLevel && player.kurageLevel > 0 ? (
                   <KurageLevelIcon
                     level={player.kurageLevel}
                     className="w-4 h-4 text-[9px]"
@@ -996,7 +1103,7 @@ function PracticeView({ serverState }: { serverState: LiveServerState }) {
               </div>
 
               <div className="flex items-center gap-8 text-[13px] font-sans tabular-nums text-right">
-                <span className="w-28 text-center font-bold text-[#a9c8c0]">
+                <span className="w-28 text-center font-bold text-[var(--kurage-accent)]">
                   {player.utilityCount} utilitários
                 </span>
                 <span className="w-24 text-center text-stone-300">
@@ -1006,7 +1113,7 @@ function PracticeView({ serverState }: { serverState: LiveServerState }) {
                   {player.ping}ms
                 </span>
               </div>
-            </Link>
+            </PlayerProfileLink>
           ))}
         </div>
       </div>
@@ -1208,8 +1315,8 @@ function PlayerRow({
   isWarmup?: boolean;
 }) {
   return (
-    <Link
-      href={`/player/${player.kurageId}`}
+    <PlayerProfileLink
+      player={player}
       className={cn(
         "group flex items-center justify-between p-2.5 rounded-[8px] transition-all duration-200 hover:bg-white/[0.04] border border-transparent hover:border-white/[0.05]",
         player.isAlive === false && !isWarmup && "opacity-45 hover:opacity-75",
@@ -1219,8 +1326,10 @@ function PlayerRow({
         <Avatar
           src={player.avatarUrl}
           username={player.username}
+          kurageId={player.kurageId}
           size="sm"
           isVerifiedPro={player.isVerifiedPro}
+          enableHovercard={Boolean(player.isKurageMember && player.kurageId)}
         />
 
         <span
@@ -1234,7 +1343,7 @@ function PlayerRow({
           {player.username}
         </span>
 
-        {player.kurageLevel > 0 ? (
+        {player.kurageLevel && player.kurageLevel > 0 ? (
           <KurageLevelIcon
             level={player.kurageLevel}
             className="w-4 h-4 text-[9px] shrink-0"
@@ -1286,6 +1395,26 @@ function PlayerRow({
           </span>
         </div>
       )}
+    </PlayerProfileLink>
+  );
+}
+
+function PlayerProfileLink({
+  player,
+  className,
+  children,
+}: {
+  player: Pick<PlayerLiveStats, "kurageId" | "isKurageMember">;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (!player.isKurageMember || !player.kurageId) {
+    return <div className={cn(className, "cursor-default")}>{children}</div>;
+  }
+
+  return (
+    <Link href={`/player/${player.kurageId}`} className={className}>
+      {children}
     </Link>
   );
 }
@@ -1350,7 +1479,7 @@ function SpectatorsSection({ spectators }: { spectators?: SpectatorInfo[] }) {
   return (
     <div className="w-full pt-6 border-t border-white/[0.08] flex items-center justify-between flex-wrap gap-4 text-mute">
       <div className="flex items-center gap-2 text-[12px] font-sans text-stone-400">
-        <PiEye className="w-4 h-4 text-[#a9c8c0]" />
+        <PiEye className="w-4 h-4 text-[var(--kurage-accent)]" />
         <span className="font-semibold text-white">{spectators.length}</span>
         <span>
           {spectators.length === 1 ? "Espectador" : "Espectadores"} no Servidor
@@ -1367,6 +1496,7 @@ function SpectatorsSection({ spectators }: { spectators?: SpectatorInfo[] }) {
             <Avatar
               src={spec.avatarUrl}
               username={spec.username}
+              kurageId={spec.kurageId}
               size="sm"
               isVerifiedPro={spec.isVerifiedPro}
             />

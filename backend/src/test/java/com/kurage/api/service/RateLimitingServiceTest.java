@@ -7,15 +7,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-
-import java.time.Duration;
+import org.springframework.data.redis.core.script.RedisScript;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -23,9 +21,6 @@ class RateLimitingServiceTest {
 
     @Mock
     private StringRedisTemplate redisTemplate;
-
-    @Mock
-    private ValueOperations<String, String> valueOperations;
 
     private RateLimitingService rateLimitingService;
 
@@ -35,61 +30,48 @@ class RateLimitingServiceTest {
     }
 
     @Test
-    void allowGlobalIp_withinLimit_shouldReturnTrue() {
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.increment(anyString())).thenReturn(5L);
-
-        boolean allowed = rateLimitingService.allowGlobalIp("127.0.0.1");
-
-        assertTrue(allowed);
+    void allowGlobalIpWithinLimit() {
+        scriptReturns(5L);
+        assertTrue(rateLimitingService.allowGlobalIp("127.0.0.1"));
     }
 
     @Test
-    void allowGlobalIp_firstRequest_shouldSetTtlAndReturnTrue() {
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.increment(anyString())).thenReturn(1L);
-
-        boolean allowed = rateLimitingService.allowGlobalIp("127.0.0.1");
-
-        assertTrue(allowed);
-        verify(redisTemplate).expire(anyString(), any(Duration.class));
+    void allowGlobalIpExceededLimit() {
+        scriptReturns(61L);
+        assertFalse(rateLimitingService.allowGlobalIp("127.0.0.1"));
     }
 
     @Test
-    void allowGlobalIp_exceededLimit_shouldReturnFalse() {
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.increment(anyString())).thenReturn(61L);
-
-        boolean allowed = rateLimitingService.allowGlobalIp("127.0.0.1");
-
-        assertFalse(allowed);
+    void publicReadLimitFailsOpenWhenRedisIsDown() {
+        scriptFails(new RedisConnectionFailureException("Connection refused"));
+        assertTrue(rateLimitingService.allowGlobalIp("127.0.0.1"));
     }
 
     @Test
-    void allowGlobalIp_redisDown_shouldFailOpenAndReturnTrue() {
-        when(redisTemplate.opsForValue()).thenThrow(new RedisConnectionFailureException("Connection refused"));
-
-        boolean allowed = rateLimitingService.allowGlobalIp("127.0.0.1");
-
-        // Fail Open: não derruba a API se o Redis cair
-        assertTrue(allowed);
+    void authLimitFailsClosedWhenRedisIsDown() {
+        scriptFails(new RedisConnectionFailureException("Connection refused"));
+        assertFalse(rateLimitingService.allowAuthIp("127.0.0.1"));
     }
 
     @Test
-    void allowSearch_redisDown_shouldFailOpen() {
-        when(redisTemplate.opsForValue()).thenThrow(new RuntimeException("Redis timeout"));
-
-        boolean allowed = rateLimitingService.allowSearch("192.168.1.100");
-
-        assertTrue(allowed);
+    void inventoryMutationLimitFailsClosedWhenRedisIsDown() {
+        scriptFails(new RedisConnectionFailureException("Connection refused"));
+        assertFalse(rateLimitingService.allowInventoryMutation("user-id"));
     }
 
     @Test
-    void allowHovercard_redisDown_shouldFailOpen() {
-        when(redisTemplate.opsForValue()).thenThrow(new RuntimeException("Redis cluster down"));
+    void imageUploadLimitFailsClosedWhenRedisIsDown() {
+        scriptFails(new RedisConnectionFailureException("Connection refused"));
+        assertFalse(rateLimitingService.allowImageUpload("user-id"));
+    }
 
-        boolean allowed = rateLimitingService.allowHovercard("10.0.0.5");
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void scriptReturns(long value) {
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), eq("70"))).thenReturn(value);
+    }
 
-        assertTrue(allowed);
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void scriptFails(RuntimeException exception) {
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), eq("70"))).thenThrow(exception);
     }
 }

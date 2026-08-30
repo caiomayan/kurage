@@ -2,16 +2,20 @@ package com.kurage.api.domain;
 
 public enum SubscriptionTier {
     FREE,
-    PLUS,
-    PRO,
-    MAX;
+    MARE;
 
     public boolean has(String feature) {
         if (feature == null) return false;
+        if (this != MARE) return false;
+
         return switch (feature) {
-            case "PROFILE_VISITORS", "PLUS_BADGE" -> ordinal() >= PLUS.ordinal();
-            case "ADVANCED_STATS", "RANKING_FILTERS", "PRO_BADGE" -> ordinal() >= PRO.ordinal();
-            case "MAX_BADGE", "SERVER_PRIORITY", "PROFILE_HIGHLIGHT" -> this == MAX;
+            case "MARE_BADGE",
+                    "PROFILE_VISITORS",
+                    "ADVANCED_STATS",
+                    "RANKING_FILTERS",
+                    "SERVER_PRIORITY",
+                    "PROFILE_HIGHLIGHT",
+                    "EARLY_ACCESS" -> true;
             default -> false;
         };
     }

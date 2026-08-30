@@ -6,6 +6,7 @@ test("2. Server telemetry mapping groups CT/TR players and computes K/D", () => 
   const players = [
     {
       kurageId: 10,
+      isKurageMember: true,
       username: "Alpha",
       steamId64: "76561198000000001",
       avatarUrl: "https://example.com/a.png",
@@ -20,6 +21,7 @@ test("2. Server telemetry mapping groups CT/TR players and computes K/D", () => 
     },
     {
       kurageId: 11,
+      isKurageMember: true,
       username: "Bravo",
       steamId64: "76561198000000002",
       avatarUrl: "https://example.com/b.png",
@@ -34,6 +36,7 @@ test("2. Server telemetry mapping groups CT/TR players and computes K/D", () => 
     },
     {
       kurageId: 12,
+      isKurageMember: true,
       username: "Charlie",
       steamId64: "76561198000000003",
       avatarUrl: "https://example.com/c.png",
@@ -55,4 +58,23 @@ test("2. Server telemetry mapping groups CT/TR players and computes K/D", () => 
   assert.equal(result.ctPlayers[0].username, "Alpha");
   assert.equal(result.trPlayers[0].kdRatio, 0);
   assert.equal(result.ctPlayers[0].kdRatio, 4);
+});
+
+test("unlinked Steam players remain real but do not receive a fake Kurage profile", () => {
+  const result = mapServerPlayersToLiveStats([
+    {
+      steamId64: "76561198000000099",
+      username: "Visitante",
+      team: "CT",
+      kills: 2,
+      deaths: 1,
+      isKurageMember: false,
+    },
+  ]);
+
+  assert.equal(result.ctPlayers[0].username, "Visitante");
+  assert.equal(result.ctPlayers[0].steamId64, "76561198000000099");
+  assert.equal(result.ctPlayers[0].isKurageMember, false);
+  assert.equal(result.ctPlayers[0].kurageId, undefined);
+  assert.equal(result.ctPlayers[0].kurageLevel, undefined);
 });

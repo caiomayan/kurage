@@ -27,7 +27,7 @@ export function MarketingPassport() {
           transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
           className="absolute left-[-15%] top-[25%] h-[450px] w-[130%] rounded-full mix-blend-screen blur-3xl opacity-75"
           style={{
-            background: "radial-gradient(ellipse at center, rgba(169, 200, 192, 0.35) 0%, rgba(146, 188, 227, 0.2) 40%, transparent 75%)",
+            background: "radial-gradient(ellipse at center, rgba(var(--kurage-accent-rgb),0.35) 0%, rgba(146, 188, 227, 0.2) 40%, transparent 75%)",
           }}
         />
 
@@ -41,7 +41,7 @@ export function MarketingPassport() {
           transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
           className="absolute left-[8%] top-[35%] h-56 w-56 rounded-full blur-2xl"
           style={{
-            background: "radial-gradient(circle, rgba(169, 200, 192, 0.5) 0%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.5) 0%, transparent 70%)",
           }}
         />
 
@@ -55,7 +55,7 @@ export function MarketingPassport() {
           transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
           className="absolute right-[12%] top-[20%] h-72 w-72 rounded-full blur-3xl"
           style={{
-            background: "radial-gradient(circle, rgba(146, 188, 227, 0.45) 0%, rgba(169, 200, 192, 0.22) 50%, transparent 75%)",
+            background: "radial-gradient(circle, rgba(146, 188, 227, 0.45) 0%, rgba(var(--kurage-accent-rgb),0.22) 50%, transparent 75%)",
           }}
         />
       </div>
@@ -70,7 +70,7 @@ export function MarketingPassport() {
             className="flex flex-col lg:col-span-5"
           >
             <div className="inline-flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] bg-surface-deep px-3.5 py-1 text-[11px] font-sans font-semibold uppercase tracking-widest text-mute">
-              <PiUserCheck className="h-3.5 w-3.5 text-[#a9c8c0]" />
+              <PiUserCheck className="h-3.5 w-3.5 text-[var(--kurage-accent)]" />
               <span>Passaporte Digital</span>
             </div>
             <h2 className="mt-5 font-display text-[44px] leading-[1.05] tracking-tight text-ink sm:text-[56px]">
@@ -101,12 +101,12 @@ export function MarketingPassport() {
             className="lg:col-span-7 relative perspective-[1000px]"
           >
             {/* Visual Teaser: Glassmorphism ID Card */}
-            <div className="relative w-full max-w-lg mx-auto aspect-[1.6/1] rounded-[16px] bg-gradient-to-br from-surface-elevated/90 to-surface-card/90 border border-[rgba(169,200,192,0.3)] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex flex-col justify-between overflow-hidden transform lg:rotate-y-[-4deg] lg:rotate-x-[4deg] transition-transform duration-700 hover:rotate-0">
+            <div className="relative w-full max-w-lg mx-auto aspect-[1.6/1] rounded-[16px] bg-gradient-to-br from-surface-elevated/90 to-surface-card/90 border border-[rgba(var(--kurage-accent-rgb),0.3)] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex flex-col justify-between overflow-hidden transform lg:rotate-y-[-4deg] lg:rotate-x-[4deg] transition-transform duration-700 hover:rotate-0">
               
               {/* Oceanic Bioluminescent Internal Aura */}
-              <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#a9c8c0]/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
+              <div className="absolute -top-20 -right-20 w-64 h-64 bg-[var(--kurage-accent)]/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
               <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-[#92bce3]/15 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[rgba(169,200,192,0.4)] to-transparent" />
+              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[rgba(var(--kurage-accent-rgb),0.4)] to-transparent" />
               
               <div className="relative z-10 flex items-start justify-between">
                 <div className="flex gap-4 items-center">
@@ -134,7 +134,7 @@ export function MarketingPassport() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] text-mute font-sans font-semibold uppercase tracking-wider">Rating Elo</span>
-                  <div className="h-5 w-14 bg-[#a9c8c0]/25 rounded animate-pulse" />
+                  <div className="h-5 w-14 bg-[var(--kurage-accent)]/25 rounded animate-pulse" />
                 </div>
               </div>
               
@@ -143,12 +143,12 @@ export function MarketingPassport() {
                 className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md z-20 transition-all duration-300 opacity-0 hover:opacity-100 cursor-pointer" 
                 onClick={() => loginWithSteam()}
               >
-                <div className="rounded-full border border-[rgba(169,200,192,0.4)] bg-surface-elevated/90 px-4 py-1.5 text-[11px] font-sans font-semibold uppercase tracking-wider text-ink mb-2">
+                <div className="rounded-full border border-[rgba(var(--kurage-accent-rgb),0.4)] bg-surface-elevated/90 px-4 py-1.5 text-[11px] font-sans font-semibold uppercase tracking-wider text-ink mb-2">
                   Passaporte Bloqueado
                 </div>
                 <p className="text-white text-[14px] font-medium flex items-center gap-1.5">
                   Conecte via Steam para revelar
-                  <PiArrowRight className="h-3.5 w-3.5 text-[#a9c8c0]" />
+                  <PiArrowRight className="h-3.5 w-3.5 text-[var(--kurage-accent)]" />
                 </p>
               </div>
             </div>

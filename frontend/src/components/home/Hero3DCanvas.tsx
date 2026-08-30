@@ -166,6 +166,11 @@ export function Hero3DCanvas() {
 
     let width = container.clientWidth;
     let height = container.clientHeight;
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    const isConstrainedDevice =
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      (navigator.hardwareConcurrency !== undefined && navigator.hardwareConcurrency <= 4) ||
+      (deviceMemory !== undefined && deviceMemory <= 4);
 
     const scene = new THREE.Scene();
     
@@ -182,12 +187,13 @@ export function Hero3DCanvas() {
     });
     
     renderer.setSize(width, height);
-    // Cap pixel ratio to save GPU
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // The original 1.5 DPR / 256x256 mesh is costly on integrated laptop GPUs.
+    // Start with a high-quality cap, then lower it only if real frame time requires it.
+    renderer.setPixelRatio(isConstrainedDevice ? 1 : Math.min(window.devicePixelRatio, 1.25));
 
     // Determine segments based on screen size (mobile needs less to maintain 60fps)
     const isMobile = width < 768;
-    const segments = isMobile ? 128 : 256; 
+    const segments = isConstrainedDevice || isMobile ? 96 : 144;
 
     // The Abyssal Silk Plane
     const geometry = new THREE.PlaneGeometry(16, 16, segments, segments);
@@ -197,9 +203,6 @@ export function Hero3DCanvas() {
       fragmentShader: FRAGMENT_SHADER,
       transparent: true,
       depthWrite: false,
-      extensions: {
-        derivatives: true, // Crucial for analytic normals
-      } as any,
       uniforms: {
         uTime: { value: 0 },
         uMouse: { value: new THREE.Vector2(0, 0) },
@@ -207,7 +210,7 @@ export function Hero3DCanvas() {
         uColorStart: { value: new THREE.Color("#020406") },
         uColorEnd: { value: new THREE.Color("#0c151c") },
         // Brand color (Kurage cyan/silver)
-        uLightColor: { value: new THREE.Color("#a9c8c0") },
+        uLightColor: { value: new THREE.Color("var(--kurage-accent)") },
       },
     });
 
@@ -217,7 +220,7 @@ export function Hero3DCanvas() {
     scene.add(mesh);
 
     // Bioluminescent Data Particles (Jellyfish spores)
-    const particleCount = isMobile ? 150 : 300;
+    const particleCount = isConstrainedDevice || isMobile ? 80 : 180;
     const particleGeo = new THREE.BufferGeometry();
     const particlePos = new Float32Array(particleCount * 3);
     const particleSpeeds = new Float32Array(particleCount);
@@ -239,7 +242,7 @@ export function Hero3DCanvas() {
       blending: THREE.AdditiveBlending,
       uniforms: {
         uTime: { value: 0 },
-        uColor: { value: new THREE.Color("#a9c8c0") }
+        uColor: { value: new THREE.Color("var(--kurage-accent)") }
       },
       vertexShader: `
         uniform float uTime;
@@ -298,7 +301,7 @@ export function Hero3DCanvas() {
       targetMouseY = y;
     };
 
-    window.addEventListener("mousemove", handleMouseMove, { passive: true });
+    container.addEventListener("pointermove", handleMouseMove, { passive: true });
 
     // Resize Handler
     const handleResize = () => {
@@ -313,12 +316,36 @@ export function Hero3DCanvas() {
     };
     window.addEventListener("resize", handleResize);
 
-    const clock = new THREE.Clock();
-    let animationFrameId: number;
+    let animationFrameId: number | null = null;
+    let isIntersecting = true;
+    let isPageVisible = document.visibilityState === "visible";
+    let isRendering = false;
+    let elapsedTime = 0;
+    let previousFrameTime = 0;
+    let sampledFrames = 0;
+    let slowFrames = 0;
+    let reducedQuality = isConstrainedDevice;
 
-    const animate = () => {
+    const reduceQuality = () => {
+      if (reducedQuality) return;
+      reducedQuality = true;
+      particles.visible = false;
+      renderer.setPixelRatio(0.85);
+      renderer.setSize(width, height, false);
+    };
+
+    const animate = (frameTime: number) => {
+      if (!isRendering) return;
       animationFrameId = requestAnimationFrame(animate);
-      const elapsedTime = clock.getElapsedTime();
+
+      if (previousFrameTime !== 0) {
+        const frameDuration = frameTime - previousFrameTime;
+        elapsedTime += Math.min(frameDuration / 1000, 0.05);
+        if (!reducedQuality && frameDuration > 22) slowFrames += 1;
+        sampledFrames += 1;
+        if (sampledFrames === 120 && slowFrames > 18) reduceQuality();
+      }
+      previousFrameTime = frameTime;
 
       // Smooth mouse interpolation (lerp)
       currentMouseX += (targetMouseX - currentMouseX) * 0.05;
@@ -333,12 +360,42 @@ export function Hero3DCanvas() {
       renderer.render(scene, camera);
     };
 
-    animate();
+    const updateRenderState = () => {
+      const shouldRender = isIntersecting && isPageVisible;
+      if (shouldRender === isRendering) return;
+      isRendering = shouldRender;
+      previousFrameTime = 0;
+      if (shouldRender) {
+        animationFrameId = requestAnimationFrame(animate);
+      } else if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+    };
+
+    const intersectionObserver = new IntersectionObserver(
+      ([entry]) => {
+        isIntersecting = entry.isIntersecting;
+        updateRenderState();
+      },
+      { threshold: 0.02 },
+    );
+    intersectionObserver.observe(container);
+
+    const handleVisibilityChange = () => {
+      isPageVisible = document.visibilityState === "visible";
+      updateRenderState();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    updateRenderState();
 
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
+      isRendering = false;
+      if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+      intersectionObserver.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      container.removeEventListener("pointermove", handleMouseMove);
       window.removeEventListener("resize", handleResize);
-      cancelAnimationFrame(animationFrameId);
       
       geometry.dispose();
       material.dispose();

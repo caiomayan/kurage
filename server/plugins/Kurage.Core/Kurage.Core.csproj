@@ -13,6 +13,9 @@
   <ItemGroup>
     <!-- CounterStrikeSharp Official API Package -->
     <PackageReference Include="CounterStrikeSharp.API" Version="1.0.371" />
+    <ProjectReference Include="..\Kurage.Core.Contracts\Kurage.Core.Contracts.csproj">
+      <Private>false</Private>
+    </ProjectReference>
   </ItemGroup>
 
 </Project>

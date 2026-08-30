@@ -8,43 +8,41 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CorsConfigTest {
 
     @Test
-    void productionApexAllowsItsWwwVariantButRejectsUntrustedOrigins() {
-        CorsConfiguration configuration = configurationFor("https://kurage.caiomayan.com");
+    void allowsOnlyExplicitProductionOrigins() {
+        CorsConfiguration configuration = configurationFor(
+                "https://kuragemar.com",
+                "https://www.kuragemar.com, https://preview.kuragemar.com"
+        );
 
-        assertEquals("https://kurage.caiomayan.com",
-                configuration.checkOrigin("https://kurage.caiomayan.com"));
-        assertEquals("https://www.kurage.caiomayan.com",
-                configuration.checkOrigin("https://www.kurage.caiomayan.com"));
+        assertEquals("https://kuragemar.com", configuration.checkOrigin("https://kuragemar.com"));
+        assertEquals("https://www.kuragemar.com", configuration.checkOrigin("https://www.kuragemar.com"));
+        assertEquals("https://preview.kuragemar.com", configuration.checkOrigin("https://preview.kuragemar.com"));
         assertNull(configuration.checkOrigin("http://localhost:3000"));
-        assertNull(configuration.checkOrigin("https://kurage-preview.vercel.app"));
-        assertNull(configuration.checkOrigin("https://www.kurage.caiomayan.com.evil.example"));
+        assertNull(configuration.checkOrigin("https://www.kuragemar.com.evil.example"));
     }
 
     @Test
-    void productionWwwAllowsItsApexVariant() {
-        CorsConfiguration configuration = configurationFor("https://www.kurage.caiomayan.com");
-
-        assertEquals("https://www.kurage.caiomayan.com",
-                configuration.checkOrigin("https://www.kurage.caiomayan.com"));
-        assertEquals("https://kurage.caiomayan.com",
-                configuration.checkOrigin("https://kurage.caiomayan.com"));
-    }
-
-    @Test
-    void nonCaiomayanConfigurationDoesNotGainAnAutomaticWwwOrigin() {
-        CorsConfiguration configuration = configurationFor("http://localhost:3000");
+    void localConfigurationDoesNotGainImplicitOrigins() {
+        CorsConfiguration configuration = configurationFor("http://localhost:3000", "");
 
         assertEquals("http://localhost:3000", configuration.checkOrigin("http://localhost:3000"));
         assertNull(configuration.checkOrigin("http://www.localhost:3000"));
     }
 
-    private static CorsConfiguration configurationFor(String frontendUrl) {
+    @Test
+    void rejectsOriginsWithPaths() {
+        assertThrows(IllegalArgumentException.class,
+                () -> configurationFor("https://kuragemar.com/app", ""));
+    }
+
+    private static CorsConfiguration configurationFor(String frontendUrl, String additionalOrigins) {
         InspectableCorsRegistry registry = new InspectableCorsRegistry();
-        new CorsConfig(frontendUrl).addCorsMappings(registry);
+        new CorsConfig(frontendUrl, additionalOrigins).addCorsMappings(registry);
         return registry.configurations().get("/**");
     }
 

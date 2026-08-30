@@ -41,7 +41,7 @@ public class AuthController {
             for (Cookie cookie : request.getCookies()) {
                 if (AppConstants.REFRESH_COOKIE_NAME.equals(cookie.getName())) {
                     refreshToken = cookie.getValue();
-                } else if ("device_id".equals(cookie.getName())) {
+                } else if (AppConstants.DEVICE_COOKIE_NAME.equals(cookie.getName())) {
                     requestDeviceId = cookie.getValue();
                 }
             }
@@ -55,13 +55,25 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "No device ID provided"));
         }
 
+        RefreshTokenSession currentSession = refreshTokenService.validateCurrentRefreshToken(refreshToken);
+        if (currentSession == null) {
+            clearRefreshCookie(request, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid, expired or compromised refresh token"));
+        }
+
+        User user = userService.getBySteamId64(currentSession.userId()).orElse(null);
+        if (user == null || !user.isActiveAccount()) {
+            refreshTokenService.revokeRefreshToken(refreshToken);
+            clearRefreshCookie(request, response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Session is no longer authorized"));
+        }
+
         // Tenta rotacionar o token (se for reúso malicioso, a família já é revogada aqui dentro)
         String newRefreshToken = refreshTokenService.rotateRefreshToken(refreshToken, requestDeviceId);
         
         if (newRefreshToken == null) {
             // Falha na rotação. Limpar cookies do cliente para forçar novo login.
-            org.springframework.http.ResponseCookie clearRefresh = com.kurage.api.util.CookieUtils.buildResponseCookie(AppConstants.REFRESH_COOKIE_NAME, "", java.time.Duration.ZERO, cookieDomain);
-            response.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, clearRefresh.toString());
+            clearRefreshCookie(request, response);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid, expired or compromised refresh token"));
         }
 
@@ -71,8 +83,9 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Failed to retrieve session after rotation"));
         }
 
-        User user = userService.getBySteamId64(session.userId()).orElse(null);
-        if (user == null) {
+        if (!session.userId().equals(user.getSteamId64())) {
+            refreshTokenService.revokeRefreshToken(newRefreshToken);
+            clearRefreshCookie(request, response);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "User not found"));
         }
 
@@ -112,5 +125,16 @@ public class AuthController {
         }
 
         return ResponseEntity.noContent().build();
+    }
+
+    private void clearRefreshCookie(HttpServletRequest request, HttpServletResponse response) {
+        String actualDomain = com.kurage.api.util.CookieUtils.resolveDomain(request, cookieDomain);
+        ResponseCookie clearRefresh = com.kurage.api.util.CookieUtils.buildResponseCookie(
+                AppConstants.REFRESH_COOKIE_NAME,
+                "",
+                java.time.Duration.ZERO,
+                actualDomain
+        );
+        response.addHeader(HttpHeaders.SET_COOKIE, clearRefresh.toString());
     }
 }

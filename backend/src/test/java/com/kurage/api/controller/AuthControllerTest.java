@@ -32,13 +32,13 @@ class AuthControllerTest {
         jwtService = mock(JwtService.class);
         userService = mock(UserService.class);
         controller = new AuthController(refreshTokenService, jwtService, userService);
-        ReflectionTestUtils.setField(controller, "cookieDomain", "caiomayan.com");
+        ReflectionTestUtils.setField(controller, "cookieDomain", "kurage.example.invalid");
     }
 
     @Test
     void logoutRevokesRefreshTokenFamilyAndExpiresRefreshCookie() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setServerName("api.caiomayan.com");
+        request.setServerName("api.kurage.example.invalid");
         request.setCookies(new Cookie(AppConstants.REFRESH_COOKIE_NAME, "refresh-token"));
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
@@ -52,7 +52,7 @@ class AuthControllerTest {
         assertNotNull(setCookie);
         assertTrue(setCookie.contains(AppConstants.REFRESH_COOKIE_NAME + "="));
         assertTrue(setCookie.contains("Max-Age=0"));
-        assertTrue(setCookie.contains("Domain=caiomayan.com"));
+        assertTrue(setCookie.contains("Domain=kurage.example.invalid"));
     }
 
     @Test

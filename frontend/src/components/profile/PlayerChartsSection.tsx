@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { PiChartLineUp, PiCrosshair, PiLockKey } from "react-icons/pi";
+import { PiChartLineUp, PiCrosshair } from "react-icons/pi";
 import { cn } from "@/lib/utils";
 
 export interface EloDataPoint {
@@ -13,7 +13,7 @@ export interface EloDataPoint {
 
 interface EloEvolutionBentoCellProps {
   history?: EloDataPoint[];
-  currentElo?: number;
+  currentElo?: number | null;
   matchesPlayed?: number;
 }
 
@@ -22,23 +22,13 @@ const CALIBRATION_MATCHES_REQUIRED = 5;
 // ── BENTO CELL: CALIBRAÇÃO (CURVA DE ELO COM SUPORTE A EARLY-STAGE) ──
 export function EloEvolutionBentoCell({
   history,
-  currentElo = 2000,
+  currentElo = null,
   matchesPlayed = 0,
 }: EloEvolutionBentoCellProps) {
   const [period, setPeriod] = useState<"30d" | "90d" | "all">("30d");
 
-  // Determine active data set
-  const data = useMemo(() => {
-    if (history && history.length > 0) return history;
-    if (matchesPlayed < CALIBRATION_MATCHES_REQUIRED) {
-      if (matchesPlayed === 0) return [];
-      return [
-        { date: "Partida 1", elo: 2000 },
-        { date: `Partida ${matchesPlayed}`, elo: currentElo },
-      ];
-    }
-    return [];
-  }, [history, matchesPlayed, currentElo]);
+  // A chart is rendered only from persisted history supplied by the API.
+  const data = useMemo(() => history ?? [], [history]);
 
   const isCalibrating = matchesPlayed < CALIBRATION_MATCHES_REQUIRED;
 
@@ -65,7 +55,7 @@ export function EloEvolutionBentoCell({
               Evolução de ELO
             </span>
             {isCalibrating && (
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold uppercase tracking-wider bg-[#a9c8c0]/10 text-[#a9c8c0] border border-[#a9c8c0]/20">
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold uppercase tracking-wider bg-[var(--kurage-accent)]/10 text-[var(--kurage-accent)] border border-[var(--kurage-accent)]/20">
                 Calibrando ({matchesPlayed}/{CALIBRATION_MATCHES_REQUIRED})
               </span>
             )}
@@ -109,67 +99,39 @@ export function EloEvolutionBentoCell({
             Jogue partidas competitivas no servidor Kurage para iniciar a calibração de ELO e gerar sua curva de desempenho.
           </p>
         </div>
-      ) : isCalibrating ? (
-        /* Case 2: In Calibration (1-4 matches) - Progress HUD with Sparse Chart */
+      ) : data.length === 0 ? (
+        /* No synthetic curve: show the factual calibration/history state. */
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex items-center justify-between p-3.5 rounded-lg bg-white/[0.02] border border-white/[0.06]">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#a9c8c0]/10 flex items-center justify-center text-[#a9c8c0]">
+              <div className="w-8 h-8 rounded-full bg-[var(--kurage-accent)]/10 flex items-center justify-center text-[var(--kurage-accent)]">
                 <PiChartLineUp className="w-4 h-4" />
               </div>
               <div className="text-left">
                 <span className="text-[13px] font-semibold text-ink block">
-                  Calibração Inicial em Andamento
+                  {isCalibrating ? "Calibração Inicial em Andamento" : "Histórico ainda indisponível"}
                 </span>
                 <span className="text-[11px] text-mute">
-                  Faltam {CALIBRATION_MATCHES_REQUIRED - matchesPlayed} partidas para consolidar o índice de ranking.
+                  {isCalibrating
+                    ? `Faltam ${CALIBRATION_MATCHES_REQUIRED - matchesPlayed} partidas para consolidar o índice de ranking.`
+                    : "A curva aparecerá quando o histórico oficial de ELO estiver disponível."}
                 </span>
               </div>
             </div>
             <div className="text-right">
-              <span className="font-mono text-[14px] font-bold text-[#a9c8c0]">
-                {matchesPlayed} / {CALIBRATION_MATCHES_REQUIRED}
+              <span className="font-mono text-[14px] font-bold text-[var(--kurage-accent)]">
+                {isCalibrating
+                  ? `${matchesPlayed} / ${CALIBRATION_MATCHES_REQUIRED}`
+                  : currentElo != null
+                    ? `${currentElo} ELO`
+                    : "Sem dado"}
               </span>
             </div>
           </div>
-
-          {/* Sparse 2-point preview curve */}
-          <div className="h-[160px] w-full opacity-70">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="oceanGradientSparse" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#a9c8c0" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#a9c8c0" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="date"
-                  stroke="rgba(255,255,255,0.12)"
-                  tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  domain={[minElo, maxElo]}
-                  stroke="rgba(255,255,255,0.12)"
-                  tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickCount={4}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="elo"
-                  stroke="#a9c8c0"
-                  strokeWidth={1.8}
-                  strokeDasharray="4 4"
-                  fill="url(#oceanGradientSparse)"
-                  activeDot={{ r: 4, fill: "#a9c8c0" }}
-                  dot={{ r: 3, fill: "#a9c8c0" }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="flex h-[150px] items-center justify-center rounded-lg border border-dashed border-white/[0.06] bg-white/[0.01] px-6 text-center">
+            <p className="max-w-md text-[12px] leading-relaxed text-mute">
+              A curva será formada somente com resultados oficiais registrados pela plataforma.
+            </p>
           </div>
         </div>
       ) : (
@@ -179,8 +141,8 @@ export function EloEvolutionBentoCell({
             <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="oceanGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#a9c8c0" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#a9c8c0" stopOpacity={0.0} />
+                  <stop offset="5%" stopColor="var(--kurage-accent)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="var(--kurage-accent)" stopOpacity={0.0} />
                 </linearGradient>
               </defs>
               <XAxis
@@ -206,19 +168,19 @@ export function EloEvolutionBentoCell({
                   color: "#ededed",
                   padding: "8px 12px",
                 }}
-                itemStyle={{ color: "#a9c8c0", fontWeight: "bold", fontSize: "12px" }}
+                itemStyle={{ color: "var(--kurage-accent)", fontWeight: "bold", fontSize: "12px" }}
                 labelStyle={{ color: "rgba(255,255,255,0.5)", marginBottom: "2px", fontSize: "10px" }}
               />
               <Area
                 type="monotone"
                 dataKey="elo"
                 name="Rating ELO"
-                stroke="#a9c8c0"
+                stroke="var(--kurage-accent)"
                 strokeWidth={1.8}
                 fillOpacity={1}
                 fill="url(#oceanGradient)"
-                activeDot={{ r: 4, fill: "#a9c8c0", stroke: "#080808", strokeWidth: 2 }}
-                dot={{ r: 3, fill: "#a9c8c0", stroke: "#080808", strokeWidth: 1.5 }}
+                activeDot={{ r: 4, fill: "var(--kurage-accent)", stroke: "#080808", strokeWidth: 2 }}
+                dot={{ r: 3, fill: "var(--kurage-accent)", stroke: "#080808", strokeWidth: 1.5 }}
               />
             </AreaChart>
           </ResponsiveContainer>

@@ -21,6 +21,15 @@ O frontend da Kurage foi construído utilizando **Next.js 16 (App Router)** com 
 - **Feedback & Notificações:** Sonner (toasts minimalistas e de alta performance)
 - **Fontes:** Inter (corpo) + Manrope (títulos/display) + JetBrains Mono (dados e IDs)
 
+### Estados de dados e falha
+
+- listas vazias são exibidas somente após resposta válida do backend;
+- falhas de ranking, busca e inventário possuem estado próprio e nova tentativa;
+- perfis retornam 404 somente quando a API confirma que o jogador não existe;
+- falha temporária da API percorre o error boundary e nunca vira um falso 404;
+- telemetria preserva o último snapshot conhecido, marca indisponibilidade e
+  expira dados live antigos.
+
 ```
 frontend/src
 ├── app/
@@ -63,8 +72,13 @@ frontend/src
 1. O usuário clica em **"Entrar com Steam"** no cabeçalho ou nas ações da plataforma.
 2. O `lib/auth.tsx` armazena no `sessionStorage` a rota atual de onde o usuário partiu (`kurage_auth_redirect_to`).
 3. O navegador é redirecionado para o backend (`/auth/steam`), que processa o handshake OpenID seguro com a Valve.
-4. Após o login bem-sucedido, o backend emite os cookies `refresh_token` e `device_id` protegidos como **`HttpOnly`**, **`Secure`** e **`SameSite=Lax`**, e redireciona o usuário para `/auth/callback`.
-5. A página `app/auth/callback/page.tsx` invoca `refreshToken()` via `POST /auth/refresh` (que envia os cookies HttpOnly automaticamente), obtendo o JWT de acesso em **memória volátil** (`inMemoryToken`), sem nunca persistir em `localStorage` (blindagem contra XSS).
+4. O backend valida/consome o state Steam one-time, emite `refresh_token` e
+   `device_id` como **HttpOnly**, **Secure** e **SameSite=Lax**, e retorna à rota
+   interna sanitizada.
+5. Ao montar, o `AuthProvider` invoca `POST /auth/refresh` com cookies, obtém o JWT
+   em **memória volátil** (`inMemoryToken`) e nunca o persiste em `localStorage`.
+   Somente `401` dispara refresh; `403` preserva a sessão e representa falta de
+   autorização.
 6. O perfil é obtido em `/users/me` e o usuário é redirecionado de volta com segurança para a página de onde partiu (`kurage_auth_redirect_to`).
 7. **Headers de Segurança:** Configurados no `next.config.ts` com Content-Security-Policy restritiva, X-Frame-Options (DENY), X-Content-Type-Options (nosniff) e Referrer-Policy.
 
@@ -105,6 +119,7 @@ A tela inicial e páginas principais no desktop (largura ≥ 1280px) adotam a di
 - **Discovery Grid:** 4 cartões no rodapé direcionando para as verticais da plataforma (Rankings, Jogadores, Times, Servidores).
 
 ### 2. Ranking de Jogadores (`app/ranking/page.tsx`)
+- **Integridade dos dados:** o frontend não cria posição, ELO, rating ou pontos de gráfico. Contas sem partidas aparecem em calibração e não são listadas no ranking; histórico só é desenhado quando há snapshots persistidos.
 - **Pódio Top 3 Expandido (`RankingPodium.tsx`):** Cartões customizados em Ouro (#1), Prata (#2) e Bronze (#3), destacando ELO, K/D, taxa de vitória, insígnia de nível e selo profissional verificado.
 - **Tabela Completa de Classificação:**
   - Posição absoluta com indicador de delta de variação recente (`↑`, `↓`, `—`).

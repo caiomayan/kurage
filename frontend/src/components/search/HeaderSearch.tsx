@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useId } from "react";
+import React, { useState, useEffect, useRef, useId, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   PiMagnifyingGlass,
@@ -16,6 +16,7 @@ import {
   PiCrosshair,
   PiTrophy,
   PiWaves,
+  PiWarningCircle,
 } from "react-icons/pi";
 import { SiFaceit } from "react-icons/si";
 import { api } from "@/lib/api";
@@ -29,6 +30,8 @@ import { TeamLogo } from "@/components/ui/TeamLogo";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
 
+const subscribeToClient = () => () => undefined;
+
 export function HeaderSearch({
   isOpen,
   onOpenChange,
@@ -41,12 +44,10 @@ export function HeaderSearch({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeToClient, () => true, () => false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => setMounted(true), []);
 
   // Global focus shortcut (Cmd+K / Ctrl+K)
   useEffect(() => {
@@ -90,7 +91,7 @@ export function HeaderSearch({
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { data, isLoading, isFetching } = useQuery<QuickSearchResponse>({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery<QuickSearchResponse>({
     queryKey: ["quickSearch", debouncedQuery],
     queryFn: () =>
       api.get<QuickSearchResponse>("/search", {
@@ -98,7 +99,6 @@ export function HeaderSearch({
       }),
     enabled: isOpen && debouncedQuery.length > 0,
     staleTime: 1000 * 30,
-    placeholderData: keepPreviousData,
   });
 
   const handleSelectPlayer = (player: SearchPlayerResult) => {
@@ -133,7 +133,10 @@ export function HeaderSearch({
   });
 
   // Flat list for keyboard navigation
-  const flatItems: Array<{ type: "player" | "team"; data: any }> = [];
+  const flatItems: Array<
+    | { type: "player"; data: SearchPlayerResult }
+    | { type: "team"; data: SearchTeamResult }
+  > = [];
   if (data) {
     if (topResult) {
       if (topResult.type === "PLAYER" && topResult.player) {
@@ -200,7 +203,7 @@ export function HeaderSearch({
           <PiMagnifyingGlass
             className={cn(
               "absolute left-2.5 h-3.5 w-3.5 transition-colors",
-              isOpen ? "text-[#a9c8c0]" : "text-charcoal"
+              isOpen ? "text-[var(--kurage-accent)]" : "text-charcoal"
             )}
             aria-hidden="true"
           />
@@ -215,7 +218,7 @@ export function HeaderSearch({
             }}
             onFocus={() => onOpenChange(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Buscar jogador ou time..."
+            placeholder={isOpen ? "Buscar jogador ou time..." : "Buscar..."}
             className={cn(
               "h-full w-full bg-transparent pl-8 pr-10 text-[13px] text-ink placeholder:text-white/50 focus:outline-none",
               !isOpen && "cursor-pointer"
@@ -226,7 +229,7 @@ export function HeaderSearch({
 
           <div className="absolute right-2 flex items-center gap-1">
             {isFetching ? (
-              <PiSpinnerGap className="h-3.5 w-3.5 animate-spin text-[#a9c8c0]" />
+              <PiSpinnerGap className="h-3.5 w-3.5 animate-spin text-[var(--kurage-accent)]" />
             ) : query && isOpen ? (
               <button
                 onClick={() => {
@@ -262,10 +265,10 @@ export function HeaderSearch({
                 <div
                   className="absolute -top-16 left-1/2 -translate-x-1/2 w-80 h-40 opacity-20 blur-3xl pointer-events-none"
                   style={{
-                    background: "radial-gradient(circle, #a9c8c0 0%, #92bce3 35%, transparent 75%)",
+                    background: "radial-gradient(circle, var(--kurage-accent) 0%, #92bce3 35%, transparent 75%)",
                   }}
                 />
-                <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[#a9c8c0]/50 to-transparent" />
+                <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[var(--kurage-accent)]/50 to-transparent" />
               </div>
 
               {/* Scrollable Results Stream */}
@@ -279,11 +282,30 @@ export function HeaderSearch({
                   </div>
                 )}
 
+                {!isLoading && isError && (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-[#d7a57f]/20 bg-[#d7a57f]/10 text-[#d7a57f]">
+                      <PiWarningCircle className="h-5 w-5" aria-hidden />
+                    </div>
+                    <p className="font-display text-[17px] font-bold text-ink">Busca temporariamente indisponível</p>
+                    <p className="mt-1 max-w-xs text-[12px] font-sans text-mute">
+                      O servidor não conseguiu confirmar os resultados desta pesquisa.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void refetch()}
+                      className="mt-4 rounded-[7px] border border-white/[0.1] bg-white/[0.06] px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-white/[0.1]"
+                    >
+                      Tentar novamente
+                    </button>
+                  </div>
+                )}
+
                 {/* 2. Empty State */}
-                {!isLoading && data && flatItems.length === 0 && (
+                {!isLoading && !isError && data && flatItems.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <div className="w-11 h-11 rounded-full bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mb-3 text-mute">
-                      <PiWaves className="h-5 w-5 text-[#a9c8c0]/60 animate-pulse" />
+                      <PiWaves className="h-5 w-5 text-[var(--kurage-accent)]/60 animate-pulse" />
                     </div>
                     <p className="font-display text-[17px] font-bold text-ink">Nenhum sinal encontrado</p>
                     <p className="mt-1 text-[12px] font-sans text-mute max-w-xs">
@@ -293,12 +315,12 @@ export function HeaderSearch({
                 )}
 
                 {/* 3. Results Stream */}
-                {data && flatItems.length > 0 && (
+                {!isError && data && flatItems.length > 0 && (
                   <div className="flex flex-col gap-3">
                     {/* ── 3A. SPOTLIGHT PRIME MATCH ── */}
                     {topResult && (
                       <div>
-                        <div className="mb-1.5 px-1.5 text-[9px] font-mono font-semibold uppercase tracking-widest text-[#a9c8c0] flex items-center gap-1.5">
+                        <div className="mb-1.5 px-1.5 text-[9px] font-mono font-semibold uppercase tracking-widest text-[var(--kurage-accent)] flex items-center gap-1.5">
                           <PiSparkle className="h-3 w-3" />
                           <span>Destaque Principal</span>
                         </div>
@@ -310,7 +332,7 @@ export function HeaderSearch({
                             className={cn(
                               "group relative flex cursor-pointer items-center justify-between rounded-[10px] p-3.5 border transition-all duration-200 overflow-hidden",
                               selectedIndex === 0
-                                ? "border-[#a9c8c0]/40 bg-white/[0.06] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                                ? "border-[var(--kurage-accent)]/40 bg-white/[0.06] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                                 : "border-white/[0.07] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]"
                             )}
                           >
@@ -318,6 +340,7 @@ export function HeaderSearch({
                               <Avatar
                                 src={topResult.player.avatarUrl}
                                 username={topResult.player.username}
+                                kurageId={topResult.player.kurageId}
                                 size="lg"
                                 isVerifiedPro={topResult.player.isVerifiedPro}
                               />
@@ -337,8 +360,8 @@ export function HeaderSearch({
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] font-sans text-mute">
-                                  <span className="flex items-center gap-1 text-[#a9c8c0] font-mono font-bold">
-                                    <Logo size={11} className="text-[#a9c8c0]" /> {topResult.player.kurageElo} ELO
+                                  <span className="flex items-center gap-1 text-[var(--kurage-accent)] font-mono font-bold">
+                                    <Logo size={11} className="text-[var(--kurage-accent)]" /> {topResult.player.kurageElo} ELO
                                   </span>
                                   {topResult.player.faceitElo != null && (
                                     <span className="flex items-center gap-1 text-stone-300 font-mono">
@@ -374,7 +397,7 @@ export function HeaderSearch({
                             className={cn(
                               "group relative flex cursor-pointer items-center justify-between rounded-[10px] p-3.5 border transition-all duration-200 overflow-hidden",
                               selectedIndex === 0
-                                ? "border-[#a9c8c0]/40 bg-white/[0.06] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                                ? "border-[var(--kurage-accent)]/40 bg-white/[0.06] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                                 : "border-white/[0.07] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]"
                             )}
                           >
@@ -390,7 +413,7 @@ export function HeaderSearch({
                                   <span className="font-display text-[19px] font-bold text-white leading-none tracking-tight">
                                     {topResult.team.name}
                                   </span>
-                                  <span className="text-[10px] font-mono font-bold text-[#a9c8c0] bg-[#a9c8c0]/10 px-1.5 py-0.5 rounded border border-[#a9c8c0]/20">
+                                  <span className="text-[10px] font-mono font-bold text-[var(--kurage-accent)] bg-[var(--kurage-accent)]/10 px-1.5 py-0.5 rounded border border-[var(--kurage-accent)]/20">
                                     [{topResult.team.tag}]
                                   </span>
                                 </div>
@@ -441,6 +464,7 @@ export function HeaderSearch({
                                   <Avatar
                                     src={player.avatarUrl}
                                     username={player.username}
+                                    kurageId={player.kurageId}
                                     size="sm"
                                     isVerifiedPro={player.isVerifiedPro}
                                   />
@@ -469,7 +493,7 @@ export function HeaderSearch({
                                 </div>
 
                                 <div className="flex items-center gap-3">
-                                  <span className="font-mono text-[12px] font-semibold text-[#a9c8c0] leading-none">
+                                  <span className="font-mono text-[12px] font-semibold text-[var(--kurage-accent)] leading-none">
                                     {player.kurageElo} ELO
                                   </span>
                                   <KurageLevelIcon level={player.kurageLevel} className="w-4 h-4" />

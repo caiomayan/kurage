@@ -256,6 +256,31 @@ class RankingServiceTest {
     }
 
     @Test
+    void unplayedPlayerHasNoPositionOrSyntheticRankingContext() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenReturn(null);
+        when(userRepository.findByKurageId(1001L)).thenReturn(Optional.of(sampleUser));
+        PlayerStats unplayedStats = PlayerStats.builder()
+                .userId(sampleUser.getId())
+                .user(sampleUser)
+                .kurageElo(200)
+                .matchesPlayed(0)
+                .build();
+        when(playerStatsService.getOrCreateStats(sampleUser)).thenReturn(unplayedStats);
+
+        PlayerRankingContextResponse context = rankingService.getPlayerContext(1001L);
+
+        assertNull(context.currentPosition());
+        assertNull(context.deltaYesterday());
+        assertTrue(context.adjacentPlayers().isEmpty());
+        assertNull(context.nextPlayerToPass());
+        assertTrue(context.history().isEmpty());
+        assertEquals(0, context.player().position());
+        verify(playerStatsRepository, never()).findLeaderboardPosition(anyInt());
+        verify(playerStatsRepository, never()).findTopOrderByKurageEloDesc(any());
+    }
+
+    @Test
     void testGetPlayerContext_UserNotFound_ThrowsException() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(anyString())).thenReturn(null);

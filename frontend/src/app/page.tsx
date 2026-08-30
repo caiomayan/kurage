@@ -6,19 +6,96 @@ import Link from "next/link";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import {
   PiArrowRight,
+  PiChartLineUp,
+  PiPalette,
+  PiQueue,
   PiShieldCheck,
+  PiSparkle,
+  PiWaves,
 } from "react-icons/pi";
 import { SteamIcon } from "@/components/ui/PlatformIcons";
 import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 const Hero3DCanvas = dynamic(
   () => import("@/components/home/Hero3DCanvas").then((mod) => mod.Hero3DCanvas),
   { ssr: false, loading: () => <div className="h-full w-full" /> }
 );
 import { LeaderboardWidget } from "@/components/home/LeaderboardWidget";
 import { HomeMarAberto } from "@/components/home/HomeMarAberto";
+import type { UserWithStats } from "@/types/user";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
+
+function MareBenefit({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="group flex gap-4">
+      <span className="grid size-10 shrink-0 place-items-center rounded-[10px] border border-[var(--mare-accent)]/20 bg-[var(--mare-accent)]/[0.07] text-[var(--mare-accent)] transition-colors group-hover:bg-[var(--mare-accent)]/12">
+        <Icon className="size-[18px]" />
+      </span>
+      <div>
+        <h4 className="text-sm font-medium text-ink">{title}</h4>
+        <p className="mt-1.5 text-xs leading-relaxed text-charcoal">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+const FUNCTION_LABEL: Record<NonNullable<UserWithStats["primaryFunction"]>, string> = {
+  IGL: "IGL",
+  AWPER: "AWP",
+  ENTRY: "Entry",
+  SUPPORT: "Suporte",
+  LURKER: "Lurker",
+  CORINGA: "Coringa",
+};
+
+function getPersonalizedHeroMessages(user: UserWithStats): string[] {
+  const stats = user.stats;
+  const matches = stats?.matchesPlayed ?? 0;
+  const messages: string[] = [];
+
+  if (matches > 0) {
+    messages.push(`${matches} partidas no Kurage.`);
+    messages.push(`${stats?.kurageElo ?? 200} de ELO no seu registro.`);
+
+    if ((stats?.matchesWon ?? 0) > 0) {
+      messages.push(`${stats?.matchesWon} vitórias conquistadas.`);
+    }
+
+    if ((stats?.winRate ?? 0) > 0) {
+      messages.push(`${stats?.winRate}% de vitórias até aqui.`);
+    }
+  }
+
+  if (user.faceitUsername) {
+    messages.push(`Faceit conectado: ${user.faceitUsername}.`);
+  }
+
+  if (user.faceitLevel) {
+    messages.push(`Nível ${user.faceitLevel} na Faceit.`);
+  }
+
+  if (user.primaryFunction && user.primaryFunction !== "CORINGA") {
+    messages.push(`Seu papel: ${FUNCTION_LABEL[user.primaryFunction]}.`);
+  }
+
+  if (user.subscriptionTier === "MARE") {
+    messages.push("Sua Maré está ativa.");
+  }
+
+  // Every authenticated player has a stable, individual datum even before
+  // playing their first Kurage match.
+  messages.push(`Seu passaporte é #${user.kurageId}.`);
+
+  return [...new Set(messages)];
+}
 
 export default function HomePage() {
   const { isAuthenticated, user, loginWithSteam } = useAuth();
@@ -35,14 +112,8 @@ export default function HomePage() {
   // Animated Keywords
   const [keywordIndex, setKeywordIndex] = useState(0);
 
-  const keywords = isAuthenticated
-    ? [
-        "Acompanhe suas métricas ao vivo.",
-        "Monitore sua evolução diária.",
-        "Sua telemetria completa.",
-        "Compare estatísticas com amigos.",
-        "Seu perfil competitivo.",
-      ]
+  const keywords = isAuthenticated && user
+    ? getPersonalizedHeroMessages(user)
     : [
         "Estatísticas precisas.",
         "Sem poluição visual.",
@@ -70,7 +141,7 @@ export default function HomePage() {
             className="absolute inset-0"
             style={{
               background:
-                "radial-gradient(ellipse 90% 80% at 50% 35%, rgba(169, 200, 192, 0.16) 0%, rgba(146, 188, 227, 0.06) 50%, transparent 85%)",
+                "radial-gradient(ellipse 90% 80% at 50% 35%, rgba(var(--kurage-accent-rgb),0.16) 0%, rgba(146, 188, 227, 0.06) 50%, transparent 85%)",
             }}
           />
 
@@ -84,7 +155,7 @@ export default function HomePage() {
             transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
             className="absolute top-[2%] left-[-8%] h-[480px] w-[550px] mix-blend-screen blur-3xl opacity-40"
             style={{
-              background: "radial-gradient(circle, rgba(169, 200, 192, 0.28) 0%, rgba(146, 188, 227, 0.1) 50%, transparent 70%)",
+              background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.28) 0%, rgba(146, 188, 227, 0.1) 50%, transparent 70%)",
             }}
           />
 
@@ -98,7 +169,7 @@ export default function HomePage() {
             transition={{ duration: 16, repeat: Infinity, ease: "easeInOut", delay: 1 }}
             className="absolute top-[5%] right-[-5%] h-[500px] w-[550px] mix-blend-screen blur-3xl opacity-35"
             style={{
-              background: "radial-gradient(circle, rgba(146, 188, 227, 0.28) 0%, rgba(169, 200, 192, 0.1) 50%, transparent 70%)",
+              background: "radial-gradient(circle, rgba(146, 188, 227, 0.28) 0%, rgba(var(--kurage-accent-rgb),0.1) 50%, transparent 70%)",
             }}
           />
 
@@ -113,7 +184,7 @@ export default function HomePage() {
             transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
             className="absolute top-[38%] left-[8%] h-64 w-64 rounded-full blur-3xl"
             style={{
-              background: "radial-gradient(circle, rgba(169, 200, 192, 0.3) 0%, rgba(146, 188, 227, 0.12) 50%, transparent 70%)",
+              background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.3) 0%, rgba(146, 188, 227, 0.12) 50%, transparent 70%)",
             }}
           />
 
@@ -128,7 +199,7 @@ export default function HomePage() {
             transition={{ duration: 15, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
             className="absolute top-[42%] right-[10%] h-72 w-72 rounded-full blur-3xl"
             style={{
-              background: "radial-gradient(circle, rgba(146, 188, 227, 0.3) 0%, rgba(169, 200, 192, 0.12) 50%, transparent 70%)",
+              background: "radial-gradient(circle, rgba(146, 188, 227, 0.3) 0%, rgba(var(--kurage-accent-rgb),0.12) 50%, transparent 70%)",
             }}
           />
 
@@ -143,7 +214,7 @@ export default function HomePage() {
             transition={{ duration: 13, repeat: Infinity, ease: "easeInOut", delay: 2 }}
             className="absolute bottom-[10%] left-[12%] h-64 w-64 rounded-full blur-3xl mix-blend-screen opacity-35"
             style={{
-              background: "radial-gradient(circle, rgba(169, 200, 192, 0.28) 0%, transparent 70%)",
+              background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.28) 0%, transparent 70%)",
             }}
           />
 
@@ -158,7 +229,7 @@ export default function HomePage() {
             transition={{ duration: 17, repeat: Infinity, ease: "easeInOut", delay: 3 }}
             className="absolute bottom-[8%] right-[15%] h-72 w-72 rounded-full blur-3xl mix-blend-screen opacity-35"
             style={{
-              background: "radial-gradient(circle, rgba(146, 188, 227, 0.28) 0%, rgba(169, 200, 192, 0.08) 50%, transparent 70%)",
+              background: "radial-gradient(circle, rgba(146, 188, 227, 0.28) 0%, rgba(var(--kurage-accent-rgb),0.08) 50%, transparent 70%)",
             }}
           />
 
@@ -171,7 +242,7 @@ export default function HomePage() {
             transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 2.5 }}
             className="absolute bottom-[15%] left-[42%] h-60 w-60 rounded-full blur-3xl mix-blend-screen opacity-30"
             style={{
-              background: "radial-gradient(circle, rgba(169, 200, 192, 0.25) 0%, transparent 70%)",
+              background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.25) 0%, transparent 70%)",
             }}
           />
 
@@ -234,7 +305,7 @@ export default function HomePage() {
                             <PiArrowRight className="h-4 w-4 -translate-x-1 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 text-[#92BCE3]" />
                           </span>
                           <div className="absolute -bottom-1 left-0 h-px w-full bg-gradient-to-r from-transparent via-[var(--hairline-strong)] to-transparent transition-opacity duration-300 group-hover:opacity-0" />
-                          <div className="absolute -bottom-1 left-0 h-px w-0 bg-gradient-to-r from-[#92bce3] via-[#a9c8c0] to-transparent transition-all duration-500 ease-out group-hover:w-full" />
+                          <div className="absolute -bottom-1 left-0 h-px w-0 bg-gradient-to-r from-[#92bce3] via-[var(--kurage-accent)] to-transparent transition-all duration-500 ease-out group-hover:w-full" />
                         </Link>
                         <Link
                           href="/mar"
@@ -242,7 +313,7 @@ export default function HomePage() {
                         >
                           <span className="relative z-10 flex items-center gap-2">
                             Navegar no mar
-                            <PiArrowRight className="h-4 w-4 -translate-x-1 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 text-[#a9c8c0]" />
+                            <PiArrowRight className="h-4 w-4 -translate-x-1 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 text-[var(--kurage-accent)]" />
                           </span>
                         </Link>
                       </div>
@@ -286,7 +357,7 @@ export default function HomePage() {
                             <PiArrowRight className="h-4 w-4 -translate-x-1 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 text-[#92BCE3]" />
                           </span>
                           <div className="absolute -bottom-1 left-0 h-px w-full bg-gradient-to-r from-transparent via-[var(--hairline-strong)] to-transparent transition-opacity duration-300 group-hover:opacity-0" />
-                          <div className="absolute -bottom-1 left-0 h-px w-0 bg-gradient-to-r from-[#92bce3] via-[#a9c8c0] to-transparent transition-all duration-500 ease-out group-hover:w-full" />
+                          <div className="absolute -bottom-1 left-0 h-px w-0 bg-gradient-to-r from-[#92bce3] via-[var(--kurage-accent)] to-transparent transition-all duration-500 ease-out group-hover:w-full" />
                         </button>
                         <Link
                           href="/mar"
@@ -294,7 +365,7 @@ export default function HomePage() {
                         >
                           <span className="relative z-10 flex items-center gap-2">
                             Navegar no mar
-                            <PiArrowRight className="h-4 w-4 -translate-x-1 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 text-[#a9c8c0]" />
+                            <PiArrowRight className="h-4 w-4 -translate-x-1 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 text-[var(--kurage-accent)]" />
                           </span>
                         </Link>
                       </div>
@@ -313,13 +384,13 @@ export default function HomePage() {
         </motion.section>
       </div>
 
-      <LeaderboardWidget isAuthenticated={isAuthenticated} />
+      <LeaderboardWidget />
 
-      {/* ── PRICING SECTION ── */}
+      {/* ── MARÉ MEMBERSHIP ── */}
       <div className="relative z-10 w-full bg-canvas">
         <section className="relative mx-auto w-full max-w-7xl px-6 py-24 sm:py-32 overflow-hidden border-t border-[var(--divider-soft)]">
           
-          {/* ── BESPOKE SECTION ATMOSPHERE: Luminous Jellyfish Bell & Aurora Ribbons ── */}
+          {/* Coral current reserved for the platform-wide Maré membership. */}
           <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none">
             {/* Top Jellyfish Bell Breathing Aura */}
             <motion.div
@@ -331,7 +402,7 @@ export default function HomePage() {
               transition={{ duration: 7.5, repeat: Infinity, ease: "easeInOut" }}
               className="absolute -top-36 left-1/2 -translate-x-1/2 h-[650px] w-[950px] rounded-full mix-blend-screen blur-3xl opacity-75"
               style={{
-                background: "radial-gradient(ellipse at 50% 30%, rgba(169, 200, 192, 0.42) 0%, rgba(146, 188, 227, 0.22) 45%, transparent 75%)",
+                background: "radial-gradient(ellipse at 50% 30%, rgba(var(--mare-accent-rgb), 0.3) 0%, rgba(var(--mare-accent-rgb), 0.1) 45%, transparent 75%)",
               }}
             />
 
@@ -344,7 +415,7 @@ export default function HomePage() {
               transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
               className="absolute left-[3%] top-[35%] h-[450px] w-[400px] rounded-full mix-blend-screen blur-3xl opacity-50"
               style={{
-                background: "radial-gradient(circle, rgba(169, 200, 192, 0.35) 0%, transparent 70%)",
+                background: "radial-gradient(circle, rgba(var(--mare-accent-rgb), 0.2) 0%, transparent 70%)",
               }}
             />
 
@@ -357,183 +428,74 @@ export default function HomePage() {
               transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 1 }}
               className="absolute right-[3%] top-[35%] h-[450px] w-[400px] rounded-full mix-blend-screen blur-3xl opacity-50"
               style={{
-                background: "radial-gradient(circle, rgba(146, 188, 227, 0.35) 0%, transparent 70%)",
+                background: "radial-gradient(circle, rgba(var(--mare-accent-rgb), 0.14) 0%, transparent 70%)",
               }}
             />
           </div>
           
-          <div className="relative z-10 mx-auto max-w-2xl text-center mb-24">
+          <div className="relative z-10 mx-auto max-w-3xl text-center">
             <h2 className="font-display text-[48px] leading-[1.05] tracking-tight text-ink sm:text-[64px]">
-              Profundidades de Acesso.
+              Uma assinatura. Toda a Kurage.
             </h2>
             <p className="mt-5 text-[17px] leading-relaxed text-body">
-              A infraestrutura definitiva para Counter-Strike. Escolha a profundidade que melhor suporta a pressão da sua evolução competitiva.
+              Maré acompanha seu passaporte por todos os servidores, modos e recursos da plataforma. Sem vantagem dentro da partida — só uma experiência mais profunda ao redor dela.
             </p>
           </div>
 
-          <div className="relative z-10 grid grid-cols-1 gap-6 lg:grid-cols-4 items-end">
-            {/* Free - Águas Rasas */}
-            <motion.div 
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.8, ease: EASE }}
-              className={cn(
-                "group relative flex flex-col justify-between rounded-[12px] bg-surface-card border border-[var(--hairline-strong)] p-8 transition-all duration-500 hover:bg-surface-elevated hover:border-white/20 min-h-[480px]",
-                isAuthenticated && user?.subscriptionTier !== "FREE" ? "opacity-50 grayscale hover:opacity-100 hover:grayscale-0" : ""
-              )}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[11px] font-sans font-semibold tracking-widest text-mute uppercase">Águas Rasas</span>
-                  {isAuthenticated && user?.subscriptionTier === "FREE" && (
-                    <span className="rounded-full border border-[var(--hairline-strong)] bg-surface-deep px-2.5 py-0.5 text-[9px] font-sans font-semibold uppercase tracking-widest text-[#a9c8c0]">
-                      Plano Atual
-                    </span>
-                  )}
-                </div>
-                <h3 className="font-sans text-[22px] font-medium text-ink">Livre</h3>
-                <p className="mt-2 text-[14px] text-body mb-7 min-h-[42px]">Essencial para iniciar seu mergulho competitivo no ecossistema.</p>
-                <div className="mb-8 font-display text-[44px] leading-none text-ink">Grátis</div>
-                <ul className="flex flex-col gap-3.5 text-[14px] text-body mb-8">
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Passaporte Digital</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Rating Dinâmico Global</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Histórico de 30 dias</span></li>
-                </ul>
-              </div>
-              <button className="w-full bg-surface-elevated text-ink h-[40px] rounded-[8px] text-[14px] font-medium border border-[var(--hairline-strong)] transition-all duration-300 hover:bg-white/10 hover:border-white/25">
-                Começar Agora
-              </button>
-            </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.65, ease: EASE, delay: 0.08 }}
+            className="relative z-10 mx-auto mt-12 max-w-5xl overflow-hidden rounded-[16px] border border-[var(--mare-accent)]/30 bg-surface-card"
+          >
+            <div aria-hidden className="pointer-events-none absolute -right-28 -top-36 h-96 w-96 rounded-full bg-[radial-gradient(circle,rgba(var(--mare-accent-rgb),0.24),transparent_67%)] blur-2xl" />
+            <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--mare-accent)] to-transparent opacity-80" />
 
-            {/* Plus - Correnteza */}
-            <motion.div 
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.8, delay: 0.1, ease: EASE }}
-              className={cn(
-                "group relative flex flex-col justify-between rounded-[12px] bg-surface-card border border-[var(--hairline-strong)] p-8 transition-all duration-500 hover:bg-surface-elevated hover:border-white/20 min-h-[480px]",
-                isAuthenticated && user?.subscriptionTier !== "PLUS" ? "opacity-50 grayscale hover:opacity-100 hover:grayscale-0" : ""
-              )}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[11px] font-sans font-semibold tracking-widest text-[#92bce3] uppercase">Correnteza</span>
-                  {isAuthenticated && user?.subscriptionTier === "PLUS" && (
-                    <span className="rounded-full border border-[var(--hairline-strong)] bg-surface-deep px-2.5 py-0.5 text-[9px] font-sans font-semibold uppercase tracking-widest text-[#a9c8c0]">
-                      Plano Atual
+            <div className="relative grid gap-0 lg:grid-cols-[0.82fr_1.18fr]">
+              <div className="flex flex-col justify-between border-b border-white/[0.07] p-7 sm:p-10 lg:border-b-0 lg:border-r">
+                <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-[var(--mare-accent)]/35 bg-[var(--mare-accent)]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--mare-accent)]">
+                      <PiWaves className="size-3.5" /> Plano único
                     </span>
-                  )}
-                </div>
-                <h3 className="font-sans text-[22px] font-medium text-ink">Plus</h3>
-                <p className="mt-2 text-[14px] text-body mb-7 min-h-[42px]">Para quem busca evoluir através de métricas profundas.</p>
-                <div className="mb-8 font-display text-[44px] leading-none text-ink">R$ 19<span className="text-[15px] text-mute font-sans ml-1">/mês</span></div>
-                <ul className="flex flex-col gap-3.5 text-[14px] text-body mb-8">
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-[#92bce3] shrink-0" /> <span className="text-ink">Tudo do Livre</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Estatísticas Avançadas</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Histórico Ilimitado</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Suporte Prioritário</span></li>
-                </ul>
-              </div>
-              <button className="w-full bg-surface-elevated text-ink h-[40px] rounded-[8px] text-[14px] font-medium border border-[var(--hairline-strong)] transition-all duration-300 hover:bg-white/10 hover:border-white/25">
-                Assinar Plus
-              </button>
-            </motion.div>
+                    {user?.subscriptionTier === "MARE" && (
+                      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--mare-accent)]">Ativo</span>
+                    )}
+                  </div>
 
-            {/* Pro - Água-Viva / Pelágica (Featured) */}
-            <motion.div 
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.8, delay: 0.2, ease: EASE }}
-              className={cn(
-                "group relative flex flex-col justify-between rounded-[12px] bg-surface-elevated border border-[rgba(169,200,192,0.35)] p-8 overflow-hidden transition-all duration-700 hover:border-[rgba(169,200,192,0.65)] min-h-[510px] lg:-mt-6 shadow-[0_12px_40px_rgba(0,0,0,0.8)]",
-                isAuthenticated && user?.subscriptionTier !== "PRO" ? "opacity-50 grayscale hover:opacity-100 hover:grayscale-0" : ""
-              )}
-            >
-              {/* Ethereal Jellyfish Bioluminescent Aura */}
-              <div className="absolute inset-0 z-0 opacity-40 transition-opacity duration-1000 group-hover:opacity-90 pointer-events-none">
-                <div 
-                  className="absolute -top-24 -right-24 w-80 h-80 rounded-full blur-3xl animate-[pulse_6s_ease-in-out_infinite]"
-                  style={{ background: "radial-gradient(circle, rgba(169, 200, 192, 0.15) 0%, rgba(146, 188, 227, 0.08) 50%, transparent 80%)" }}
-                />
-                <div 
-                  className="absolute -bottom-24 -left-24 w-80 h-80 rounded-full blur-3xl"
-                  style={{ background: "radial-gradient(circle, rgba(146, 188, 227, 0.12) 0%, transparent 70%)" }}
-                />
-              </div>
-
-              {/* Glowing Seafoam Top Hairline */}
-              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[rgba(169,200,192,0.6)] to-transparent" />
-              
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[11px] font-sans font-semibold tracking-widest text-[#a9c8c0] uppercase">Pelágica</span>
-                  {isAuthenticated && user?.subscriptionTier === "PRO" ? (
-                    <span className="rounded-full border border-[rgba(169,200,192,0.4)] bg-[rgba(169,200,192,0.1)] px-2.5 py-0.5 text-[9px] font-sans font-semibold uppercase tracking-widest text-[#a9c8c0]">
-                      Plano Atual
-                    </span>
-                  ) : (
-                    <span className="rounded-full border border-[rgba(169,200,192,0.4)] bg-[rgba(169,200,192,0.1)] px-2.5 py-0.5 text-[9px] font-sans font-semibold uppercase tracking-widest text-[#a9c8c0]">
-                      Recomendado
-                    </span>
-                  )}
+                  <h3 className="mt-8 font-display text-[58px] leading-none text-ink sm:text-[72px]">
+                    Maré<span className="text-[var(--mare-accent)]">.</span>
+                  </h3>
+                  <p className="mt-5 max-w-md text-[15px] leading-relaxed text-body">
+                    Sua identidade premium atravessa a Kurage inteira e evolui junto com cada nova corrente da plataforma.
+                  </p>
                 </div>
 
-                <h3 className="font-sans text-[22px] font-medium text-ink">Pro</h3>
-                <p className="mt-2 text-[14px] text-body mb-7 min-h-[42px]">O padrão de excelência tática para atletas e equipes de alta performance.</p>
-                <div className="mb-8 font-display text-[44px] leading-none text-[#a9c8c0]">R$ 49<span className="text-[15px] text-mute font-sans ml-1">/mês</span></div>
-                <ul className="flex flex-col gap-3.5 text-[14px] text-body mb-8">
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-[#a9c8c0] shrink-0" /> <span className="text-ink">Tudo do Plus</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-[#a9c8c0] shrink-0" /> <span className="text-ink">Selo Verificado Pro</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-[#a9c8c0] shrink-0" /> <span className="text-ink">Telemetria Abissal Completa</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-[#a9c8c0] shrink-0" /> <span className="text-ink">Acesso Antecipado a Torneios</span></li>
-                </ul>
-              </div>
-
-              <div className="relative z-10">
-                <button className="w-full bg-ink text-black h-[42px] rounded-[8px] text-[14px] font-semibold transition-all duration-300 hover:bg-white hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_20px_rgba(169,200,192,0.2)]">
-                  Assinar Pro
-                </button>
-              </div>
-            </motion.div>
-
-            {/* Max - Fossa Abissal */}
-            <motion.div 
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.8, delay: 0.3, ease: EASE }}
-              className={cn(
-                "group relative flex flex-col justify-between rounded-[12px] bg-surface-card border border-[var(--hairline-strong)] p-8 transition-all duration-500 hover:bg-surface-elevated hover:border-white/20 min-h-[480px]",
-                isAuthenticated && user?.subscriptionTier !== "MAX" ? "opacity-50 grayscale hover:opacity-100 hover:grayscale-0" : ""
-              )}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[11px] font-sans font-semibold tracking-widest text-mute uppercase">Fossa Abissal</span>
-                  {isAuthenticated && user?.subscriptionTier === "MAX" && (
-                    <span className="rounded-full border border-[var(--hairline-strong)] bg-surface-deep px-2.5 py-0.5 text-[9px] font-sans font-semibold uppercase tracking-widest text-[#a9c8c0]">
-                      Plano Atual
-                    </span>
-                  )}
+                <div className="mt-10 border-t border-white/[0.07] pt-6">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">Assinatura mensal</p>
+                  <p className="mt-2 text-sm text-ink">
+                    {user?.subscriptionTier === "MARE" ? "Maré está ativa no seu passaporte." : "Checkout e valor em preparação."}
+                  </p>
                 </div>
-                <h3 className="font-sans text-[22px] font-medium text-ink">Max</h3>
-                <p className="mt-2 text-[14px] text-body mb-7 min-h-[42px]">Acesso total e infraestrutura irrestrita para organizações.</p>
-                <div className="mb-8 font-display text-[44px] leading-none text-ink">R$ 129<span className="text-[15px] text-mute font-sans ml-1">/mês</span></div>
-                <ul className="flex flex-col gap-3.5 text-[14px] text-body mb-8">
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-[#a9c8c0] shrink-0" /> <span className="text-ink">Tudo do Pro</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Telemetria em Tempo Real</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Acesso Direto à API Kurage</span></li>
-                  <li className="flex items-center gap-3"><PiShieldCheck className="h-4 w-4 text-mute group-hover:text-ink transition-colors shrink-0" /> <span>Suporte Dedicado 24/7</span></li>
-                </ul>
               </div>
-              <button className="w-full bg-surface-elevated text-ink h-[40px] rounded-[8px] text-[14px] font-medium border border-[var(--hairline-strong)] transition-all duration-300 hover:bg-white/10 hover:border-white/25">
-                Assinar Max
-              </button>
-            </motion.div>
-          </div>
+
+              <div className="p-7 sm:p-10">
+                <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
+                  <MareBenefit icon={PiPalette} title="Identidade Maré" description="Tema coral exclusivo e selo Maré em todo o ecossistema." />
+                  <MareBenefit icon={PiQueue} title="Prioridade global" description="Fila prioritária nos servidores oficiais, sem expulsar quem já está jogando." />
+                  <MareBenefit icon={PiChartLineUp} title="Visão ampliada" description="Histórico, filtros e análises avançadas conforme os dados forem liberados." />
+                  <MareBenefit icon={PiSparkle} title="Acesso antecipado" description="Entrada nas primeiras ondas de novos modos, recursos e experiências." />
+                </div>
+
+                <div className="mt-9 flex items-center gap-3 rounded-[10px] border border-white/[0.07] bg-black/30 px-4 py-3.5">
+                  <PiShieldCheck className="size-4 shrink-0 text-[var(--mare-accent)]" />
+                  <p className="text-xs leading-relaxed text-charcoal">Maré nunca altera dano, economia, balanceamento ou resultado de uma partida.</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
         </section>
       </div>
 

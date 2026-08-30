@@ -1,5 +1,37 @@
 # Auditoria completa do estado atual do Kurage
 
+> **Atualização de implementação (21/08/2026):** MongoDB foi removido e as
+> notificações passaram para PostgreSQL por `V4__notifications_in_postgres.sql`.
+> As referências a Mongo neste documento descrevem o snapshot auditado em
+> 20/08/2026 e permanecem como registro histórico. Consulte
+> [Notificações no PostgreSQL](./10_notificacoes_postgres.md) para o estado atual.
+>
+> **Atualização de testes (22/08/2026):** H2 foi removido. A suíte de integração
+> usa PostgreSQL e Redis reais via Testcontainers e é obrigatória no CI.
+>
+> **Atualização de segurança (29/08/2026):** heartbeat agora usa credenciais
+> individuais por servidor e falha fechado; autenticação consulta papel e estado
+> atuais da conta; uploads são limitados, validados, reencodados e armazenados em
+> chaves imutáveis. Os achados originais permanecem abaixo como baseline e a
+> tabela de P0 registra o estado resolvido.
+>
+> **Atualização de integridade dos dados (29/08/2026):** perfis, hovercards,
+> menu, home e ranking deixaram de fabricar posição, ELO, rating e histórico.
+> Contas sem partidas não recebem posição nem entram na classificação. A regra
+> foi validada contra PostgreSQL 16 real; lint, testes e build do frontend agora
+> também são um gate dedicado do CI.
+>
+> **Atualização de estados de falha (29/08/2026):** ranking, busca, pódio da home,
+> inventário público e perfis distinguem ausência legítima de indisponibilidade.
+> Os proxies de inventário não devolvem mais HTTP 200 com loadout vazio quando
+> seus upstreams falham.
+>
+> **Fechamento operacional (29/08/2026):** o cadastro deixou de transmitir IP a
+> serviço HTTP de geolocalização, links jurídicos agora apontam para minutas reais,
+> CI ganhou scan de segredos/Dependabot e foi publicado um runbook com RPO/RTO e
+> gates separados para alfa fechada e produção paga. A alfa ainda depende das
+> ações externas listadas no documento 15.
+
 **Data-base:** 20 de agosto de 2026  
 **Escopo:** frontend, backend, dados, autenticação, integrações, plugins CS2,
 infraestrutura, segurança, operação, produto, qualidade e prontidão para Git.  
@@ -59,7 +91,7 @@ Limitações:
 |---|---|
 | Backend | Java 21, Spring Boot 4.1.0, Maven, 124 fontes principais (~6,6 mil linhas) |
 | Frontend | Next.js 16.3.1, React 19.2.8, TypeScript, Tailwind 4, 97 fontes TS/TSX (~17,4 mil linhas) |
-| Plugins | C#/.NET 10, CounterStrikeSharp 1.0.371, `Kurage.Core` e `Kurage.Inventory` |
+| Plugins | C#/.NET 10, CounterStrikeSharp 1.0.371, `Kurage.Core`, `Kurage.RetakeWeapons` e Inventory Simulator original |
 | Transacional | PostgreSQL 16, JPA e Flyway |
 | Efêmero/cache | Redis 7 |
 | Notificações | MongoDB 6 |
@@ -106,7 +138,7 @@ notificações e servidores, mas ainda há acoplamento entre serviços e stores.
 | PostgreSQL | usuários, FACEIT, stats, times, convites, inventários JSONB, visitas, servidores e snapshots | Deve ser a fonte transacional única |
 | Redis | refresh tokens, famílias de sessão, rate limit, caches e roster live | Correto para dados efêmeros; precisa HA e autenticação |
 | MongoDB | notificações | Custo operacional desnecessário no estágio atual; migrar para Postgres |
-| R2 | avatars e logos | Adequado após validação/reencode e política de lifecycle |
+| R2 | avatars e logos | Adequado: conteúdo validado/reencodado, chaves imutáveis e substituição segura; falta reconciliação periódica de órfãos raros |
 
 Não existem entidades comerciais de `Subscription`, `Price`, `PaymentEvent`,
 `Entitlement`, `ServerLease`, `UsageLedger`, `Match`, `MatchParticipant` ou
@@ -126,11 +158,14 @@ Não existem entidades comerciais de `Subscription`, `Price`, `PaymentEvent`,
    mantém em memória.
 6. `apiFetch` repete uma vez após 401 e o backend rotaciona a família de refresh.
 
-Pontos fortes: access token não vai para LocalStorage, token curto, cookie seguro,
-rotação e proteção de URL de retorno. Lacunas: não há state/nonce one-time ligado
-ao navegador; a rotação Redis não é atômica; tokens são chaves legíveis no Redis;
-o filtro confia apenas nos claims até 15 minutos; o callback registra informação
-demais em falha.
+Atualização validada em 27/08/2026: o state é one-time, ligado ao navegador e à
+URL de retorno; a rotação Redis é atômica, tokens ficam hashados e a família tem
+vida absoluta de 30 dias; o callback possui timeouts e não registra assinatura ou
+parâmetros. Cookies são host-only por padrão e refresh/logout validam `Origin`.
+Atualização validada em 29/08/2026: requisições autenticadas consultam no banco o
+papel e o estado atuais da conta; uma suspensão revoga as famílias de refresh e
+passa a bloquear imediatamente access tokens existentes. Ainda faltam API/painel
+administrativo e audit log durável para operar essas mudanças.
 
 ### 5.2 Perfil, FACEIT, busca e ranking
 
@@ -139,9 +174,10 @@ snapshots. O header possui busca, mas não há página `/search`. O ranking limi
 primeira janela e filtra no cliente. O backend inicializa o ELO em 200, porém não
 há ingestão de partida nem operação que atualize estatísticas competitivas.
 
-O frontend mascara ausência com `#1`, ELO `2000`, rating `1.0` e pontos de gráfico
-fabricados. Isso é especialmente grave porque a confiança no dado é o núcleo da
-proposta. Indisponível deve ser mostrado como indisponível ou “em calibração”.
+Na linha de base, o frontend mascarava ausência com `#1`, ELO `2000`, rating
+`1.0` e pontos de gráfico fabricados. Isso foi corrigido em 29/08: dados ausentes
+aparecem como indisponíveis ou “em calibração”, gráficos usam somente snapshots
+persistidos e contas com zero partidas são excluídas das consultas de ranking.
 
 ### 5.3 Times
 
@@ -166,34 +202,34 @@ JSON; não altera arma, skin, `CEconItemView` ou loadout dentro do CS2.
 ### 5.5 Servidores
 
 `Kurage.Core` envia mapa e jogadores para `POST /servers/{id}/heartbeat`. A API
-enriquece o roster, guarda estado live no Redis e marca offline após dois minutos.
+enriquece o roster, guarda estado live no Redis e marca offline após 90 segundos.
 `/mar` consulta o browser a cada oito segundos.
 
 Hoje existe apenas telemetria de demonstração. Não há proprietário/tenant,
 provider ID, região, ciclo de vida, GSLT/RCON, provisionamento, start/stop,
 configuração, cobrança por uso, quotas, console, backups, capacidade ou reconciliação.
-Uma chave global autentica todos os servidores e, se estiver vazia, o heartbeat é
-aceito. `css_mode` pode ser usado por qualquer jogador e apenas muda o rótulo, não
-o modo real.
+Desde 29/08, cada servidor possui hash de credencial próprio no PostgreSQL e o
+heartbeat falha fechado; a identidade de modo é fixa por processo e não pode ser
+alterada por comandos em jogo.
 
 ### 5.6 Assinatura
 
-Os cards FREE, PLUS, PRO e MAX mostram R$ 0/19/49/129, mas os CTAs não têm ação.
-Não há checkout, webhook, invoice, trial, grace period, cancelamento, reembolso,
-portal ou conciliação. `hasSubscriptionFeature` não é aplicado e as matrizes da
-home, tipos e configurações se contradizem. “Selo Verificado Pro” aparece como
-benefício pago, apesar de `isVerifiedPro` ser um atributo editorial separado.
+O catálogo foi consolidado em um plano global, **Maré**, além do acesso gratuito.
+O enum, os entitlements, a expiração efetiva e a identidade visual coral já estão
+implementados. Ainda não há preço publicado, checkout, webhook, invoice, grace
+period, cancelamento, reembolso, portal ou conciliação. `isVerifiedPro` permanece
+uma verificação editorial independente e nunca é vendido pelo plano.
 
 ## 6. Matriz de maturidade
 
 | Domínio | Estado | Para ficar pronto |
 |---|---|---|
-| Identidade | Beta técnico | nonce/state, sessão atômica, account status e auditoria |
+| Identidade | Beta técnico | painel/API de suspensão, auditoria e operação de segredos |
 | Perfil/FACEIT | Beta técnico | timeouts, dados honestos, privacidade e tolerância a falhas |
 | Times | Backend beta/UI ausente | páginas, invariantes concorrentes e autorização E2E |
 | Ranking | Leitura protótipo | domínio de partidas, ELO versionado e paginação correta |
 | Inventário | Simulador beta | isolamento por usuário, contrato/limites e aplicação real opcional |
-| Servidores | Telemetria protótipo | control plane, tenant, provider, credenciais e usage ledger |
+| Servidores | Telemetria autenticada | control plane, tenant, provider, rotação e usage ledger |
 | Billing | Não implementado | Mercado Pago, inbox idempotente, reconciliação e entitlements |
 | Operação | Desenvolvimento | CI/CD, secrets, observabilidade, backup, restore e runbooks |
 | Legal/compliance | Preparação | termos, privacidade, AUP, retenção, direitos de ativos e registro |
@@ -216,22 +252,22 @@ benefício pago, apesar de `isVerifiedPro` ser um atributo editorial separado.
 
 | ID | Achado e evidência | Implementação obrigatória |
 |---|---|---|
-| P0-01 | JWT fallback conhecido em `backend/docker-compose.yml:67`; secrets vazios aceitos | Remover todo fallback, validar entropia no boot e rotacionar qualquer valor já usado |
-| P0-02 | Postgres/Redis/Mongo publicados em `docker-compose.yml:11,24,38` | Rede privada, sem port mapping público, auth/TLS e regras de firewall |
-| P0-03 | Heartbeat falha aberto em `GameServerController.java:27-52` | Credencial aleatória por servidor, hash no banco, escopo, revogação e fail-closed |
+| P0-01 | **Resolvido em 29/08:** havia fallback de JWT e secrets fracos | Compose exige valores e o boot valida presença/entropia; valores que já saíram da máquina ainda devem ser rotacionados pelo operador |
+| P0-02 | **Resolvido em 29/08 para o artefato:** bancos estavam publicados | Compose de produção mantém PostgreSQL/Redis privados, Redis autenticado e Mongo removido; firewall real ainda integra o gate externo |
+| P0-03 | **Resolvido em 29/08:** heartbeat usava chave global e validação no controller | Hash SHA-256 individual no PostgreSQL, comparação constante e fail-closed implementados |
 | P0-04 | Nenhum motor de partidas/ELO | Criar Match/participants/result event idempotente, ELO versionado, audit log e disputa |
-| P0-05 | Preços com botões inertes em `frontend/src/app/page.tsx:404-534` | Não anunciar venda até checkout, webhook e entitlement funcionarem E2E |
-| P0-06 | Inventário atravessa contas em `inventory-context.tsx:27,112-184` | Chave por user ID, limpeza na troca, cancelamento de debounce, ETag/revisão e erros visíveis |
-| P0-07 | Login Steam sem state/nonce em `SteamAuthService.java:41-80` | Nonce one-time em Redis, vinculado à sessão/return URL, expiração e bloqueio de replay |
-| P0-08 | Rotação refresh não atômica em `RefreshTokenService.java:87-153` | Script Lua/transação atômica, hash do token e duração absoluta da família |
-| P0-09 | Upload arbitrário em `S3Service.java:28-67` | Limite, magic bytes, decode/reencode, dimensões, MIME fixo e lifecycle |
-| P0-10 | IP enviado por HTTP em `UserService.java:422-443` | Usar header de país do edge ou GeoIP local; não transmitir/logar IP bruto |
-| P0-11 | Perfil fabrica `#1`, 2000 e rating 1.0 | Estados “sem dado/em calibração”, contrato único de ELO e histórico real |
-| P0-12 | Rotas `/team`, `/teams`, `/search`, `/ranking/teams` inexistentes | Implementar rotas necessárias ou remover links/sitemap até existirem |
-| P0-13 | Lint falha com 85 erros e 86 warnings | Corrigir e tornar lint zero um gate independente de CI |
-| P0-14 | Sem termos, privacidade, AUP ou cancelamento; footer usa `#` | Publicar documentos jurídicos revisados antes de cadastro comercial |
-| P0-15 | `.env` local + sem histórico Git auditável | Secret scan, rotação se houve cópia externa, primeiro commit limpo e tags assinadas |
-| P0-16 | Licença proprietária uniforme incompatível com exceção CSS | Núcleo proprietário; `server/plugins` MIT; notices/SBOM e revisão jurídica |
+| P0-05 | **Resolvido para a alfa em 29/08:** Maré tinha apresentação sem cobrança | UI informa explicitamente “checkout e valor em preparação”, sem CTA de venda; billing E2E continua obrigatório para produção paga |
+| P0-06 | **Resolvido em 29/08:** inventário podia atravessar contas | Backend virou fonte de verdade por usuário, estado é limpo na troca e falhas são visíveis |
+| P0-07 | **Resolvido em 27/08:** login Steam possuía callback sem state ligado ao navegador | State one-time Redis + cookie, expiração, `GETDEL` e bloqueio de replay implementados |
+| P0-08 | **Resolvido em 27/08:** rotação refresh não era atômica e expunha tokens em chaves Redis | Compare-and-set Lua, hash, grace concorrente e duração absoluta implementados |
+| P0-09 | **Resolvido em 29/08:** upload público aceitava conteúdo arbitrário e sobrescrevia uma chave estável | Limite de 5 MB/dimensões/pixels, detecção real PNG/JPEG, decode/reencode 512×512, MIME fixo, chave imutável, limpeza pós-commit e rate limit implementados; reconciliação periódica de órfãos fica como melhoria operacional |
+| P0-10 | **Resolvido em 29/08:** IP era enviado por HTTP a geolocalização externa | Cadastro aceita somente país validado do edge; sem fallback de país e sem transmissão de IP bruto |
+| P0-11 | **Resolvido em 29/08:** perfil fabricava `#1`, 2000, rating 1.0 e histórico | Estados honestos, histórico persistido e exclusão de contas sem partidas implementados e validados no PostgreSQL |
+| P0-12 | **Resolvido para a alfa em 29/08:** havia referências a rotas inexistentes | Links e sitemap não publicam essas rotas; experiência completa de times segue como P1 |
+| P0-13 | **Resolvido em 29/08:** lint falhava com 85 erros e 86 warnings | Lint zero, testes e build de produção executados no workflow dedicado `frontend-quality.yml` |
+| P0-14 | **Parcial em 29/08:** termos, privacidade e AUP reais substituíram `#` | Minutas ainda exigem dados do controlador/canais e revisão jurídica antes de usuários reais; política comercial virá com billing |
+| P0-15 | **Parcial em 29/08:** ignore defensivo e CI Gitleaks/Dependabot configurados | Primeiro run remoto, revisão do único commit existente, rotação preventiva e tags assinadas ainda são ações do proprietário |
+| P0-16 | **Resolvido estruturalmente em 29/08:** licença uniforme era incompatível | Núcleo proprietário, `server/plugins` MIT e avisos de terceiros separados; revisão jurídica final permanece recomendada |
 
 ## 9. Riscos P1 — MVP comercial
 
@@ -241,10 +277,11 @@ benefício pago, apesar de `isVerifiedPro` ser um atributo editorial separado.
    condicional/lock (`TeamService.java:448-530,680-705`).
 3. **Postgres + Mongo:** não há atomicidade/outbox. Migrar notificações para
    Postgres e publicar eventos após commit.
-4. **Integrações bloqueantes:** Steam/FACEIT sem timeouts/circuit breaker e FACEIT
-   dentro de transação (`UserService.java:340,390-417`).
-5. **Rate limit:** confia no primeiro `X-Forwarded-For` e falha aberto sem Redis
-   (`RateLimitInterceptor.java:58-64`).
+4. **Integrações bloqueantes:** Steam agora possui timeouts; FACEIT ainda precisa
+   de timeout/circuit breaker e não deve executar dentro de transação.
+5. **Rate limit:** **resolvido em 27/08** para a fronteira atual: Caddy normaliza
+   Cloudflare/IP, a aplicação usa `remoteAddr`, Lua aplica TTL atômico e rotas
+   sensíveis falham fechado. Falta HA/alerta do Redis.
 6. **Contrato do plugin:** `/users`, `/servers` e `/inventory` não são versionados;
    rank/clan tag/fallbacks divergem.
 7. **Lifecycle C#:** tarefas fire-and-forget, unload concorrente e `!sync` sem
@@ -259,8 +296,9 @@ benefício pago, apesar de `isVerifiedPro` ser um atributo editorial separado.
     RPO/RTO.
 12. **Observabilidade:** sem correlation ID, tracing, SLOs, alertas ou métricas de
     negócio.
-13. **APIs públicas do frontend:** mascaram upstream como array vazio e carecem de
-    timeout/rate limit/cache.
+13. **APIs públicas do frontend:** o mascaramento de upstream como conteúdo vazio
+    foi corrigido em 29/08; ainda faltam timeout explícito, rate limit de borda e
+    política uniforme de cache para todas as rotas públicas.
 14. **Autorização:** feature gating deve vir de entitlements autoritativos, nunca
     da string `tier` exibida no cliente.
 15. **Privacidade:** definir acesso/exportação/exclusão, retenção e visibilidade de
@@ -276,8 +314,8 @@ benefício pago, apesar de `isVerifiedPro` ser um atributo editorial separado.
   `prefers-reduced-motion` para WCAG 2.2 AA.
 - Corrigir canonical por rota, título duplicado, OG image, sitemap e estados 404/503.
 - Eliminar `any`, código morto, dependências sem uso e arquivos de 40–58 KB.
-- Restringir `apiFetch` a URLs relativas/aprovadas para que bearer/cookies nunca
-  sejam anexados a host arbitrário.
+- **Resolvido em 27/08:** `apiFetch` restringe URL absoluta à origem configurada
+  da API; bearer/cookies não são anexados a host arbitrário.
 - Criar validação runtime dos DTOs e um contrato de erro consistente.
 - Remover defaults hard-coded de tickrate/placar e fornecer telemetria factual.
 - Otimizar busca/ranking com paginação server-side, índices `pg_trgm` e projeções.
@@ -286,19 +324,22 @@ benefício pago, apesar de `isVerifiedPro` ser um atributo editorial separado.
 
 | Verificação | Resultado |
 |---|---|
-| Backend Maven test | 22 suítes, 137 testes, 0 falhas, 0 erros, 0 ignorados |
-| Backend package | Sucesso; JAR ~89,5 MB |
+| Backend Maven `verify -Pintegration` | 171 testes unitários + 23 integrações, 0 falhas, 0 erros, 0 ignorados |
+| Backend package/startup | Sucesso; aplicação iniciou contra PostgreSQL 16 e Redis 7 do Testcontainers |
 | Compose dev/prod `config --quiet` | Sucesso |
-| Startup completo | Não validado; probe parou sem Postgres local |
-| Frontend `npm run build` | Sucesso; 10 páginas estáticas geradas |
-| Frontend `npm test` | 19/19 aprovados em 4 suítes unitárias |
-| Frontend `npm run lint` | Falha: 85 erros e 86 warnings |
+| Frontend `npm run build` | Sucesso; 12 páginas estáticas geradas e rotas dinâmicas compiladas |
+| Frontend `npm test` | 29/29 aprovados |
+| Frontend `npm run lint` | Sucesso; 0 erros e 0 warnings |
+| Smoke HTTP de falhas do frontend | Perfil inválido 404; SteamID inválido 400; upstream de inventário indisponível 503 |
 | Plugins C# | Revisão estática; sem SDK .NET para build |
 | QA visual browser | Runtime integrado indisponível |
 | Produção pública | domínio principal respondeu 404; API/www/play não resolveram DNS na data-base |
 
-Os testes Java usam H2 e Mongo mockado. Faltam Testcontainers, Flyway real,
-concorrência, contracts, E2E, carga, CS2 dedicado, billing e restore/chaos tests.
+Na linha de base desta auditoria, os testes Java usavam H2 e Mongo mockado. Esse
+ponto foi corrigido em 27/08/2026: H2/Mongo foram removidos e, em 29/08, 23
+integrações executam Flyway V1–V10 sobre PostgreSQL 16 e Redis 7 reais via Testcontainers.
+Ainda faltam concorrência, contracts, E2E, carga, CS2 dedicado, billing e testes
+de restore/chaos.
 
 ## 12. Arquitetura-alvo aprovada
 
@@ -365,7 +406,7 @@ decay e anti-smurf devem virar ADR versionado antes da implementação.
 
 - concluir P0-01 a P0-16;
 - lint, teste e build como CI obrigatório;
-- Testcontainers para Postgres/Redis e migration do Mongo;
+- Testcontainers para Postgres/Redis e migration do Mongo — concluído em 27/08/2026;
 - privacy notice, termos, AUP e cancelamento revisados;
 - páginas não implementadas deixam de ser indexadas;
 - nenhuma UI exibe dado inventado;
@@ -451,4 +492,3 @@ backend valida resultado, ELO muda e o assinante enxerga o valor**.
 Esta auditoria passa a ser a referência factual do estado em 20/08/2026. Os docs
 01–07 descrevem componentes e intenção, mas devem ser lidos à luz deste documento
 até serem atualizados junto com cada implementação.
-

@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -41,6 +42,11 @@ public class UserInventory extends Auditable implements Persistable<UUID> {
     // Hibernate 7.4 selects its Jackson 2 format mapper while both Jackson generations are present.
     // InventoryService converts this persistence representation to Jackson 3 at the HTTP boundary.
     private JsonNode items;
+
+    @Version
+    @Column(name = "lock_version", nullable = false)
+    @Builder.Default
+    private Long lockVersion = 0L;
 
     @Override
     public UUID getId() {

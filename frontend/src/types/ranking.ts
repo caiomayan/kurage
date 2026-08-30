@@ -25,7 +25,6 @@ export interface LeaderboardPlayer {
   country: string | null;
   kurageLevel: number;
   kurageElo: number;
-  hltvRating?: number | null;
   kdRatio: number | null;
   winRate: number | null;
   matches: number | null;
@@ -51,7 +50,7 @@ export interface TeamLeaderboardItem {
 
 export interface PlayerRankingContext {
   player: LeaderboardPlayer;
-  currentPosition: number;
+  currentPosition: number | null;
   deltaYesterday: number | null;
   deltaWeek: number | null;
   adjacentPlayers: LeaderboardPlayer[];

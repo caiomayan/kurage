@@ -14,31 +14,28 @@ The CS2 inventory subsystem enables rich, high-performance display of knives, gl
 
 ---
 
-## 🔄 Data Flow with cstrike.app
+## 🔄 Current Data Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Player as Player
-    participant NextRoute as Next.js API Proxy (/api/cstrike/inventory/:steamId64)
-    participant CStrikeAPI as cstrike.app API
+    participant Web as Next.js Frontend
     participant SpringAPI as Spring Backend (/inventory/:steamId64)
     participant Postgres as PostgreSQL (user_inventories JSONB)
+    participant Equipped as Next.js (/api/equipped/v5/:steamId64)
+    participant Plugin as Inventory Simulator
 
-    Player->>NextRoute: Accesses Profile Inventory Tab
-    NextRoute->>CStrikeAPI: Requests inventory for SteamID64
-    alt cstrike.app responds 200 OK
-        CStrikeAPI-->>NextRoute: Returns item list with metadata
-        NextRoute->>SpringAPI: PUT /inventory/:steamId64 (Persists cache)
-        SpringAPI->>Postgres: UPSERT in user_inventories
-        NextRoute-->>Player: Renders skins grid with float, rarity, stickers
-    else cstrike.app unavailable / rate-limited
-        NextRoute->>SpringAPI: GET /inventory/:steamId64
-        SpringAPI->>Postgres: SELECT items FROM user_inventories
-        Postgres-->>SpringAPI: Returns cached items
-        SpringAPI-->>NextRoute: Returns last stored snapshot
-        NextRoute-->>Player: Renders fallback cache with indicator
-    end
+    Player->>Web: Opens inventory or profile
+    Web->>SpringAPI: GET /inventory/:steamId64
+    SpringAPI->>Postgres: SELECT items
+    Postgres-->>SpringAPI: Persisted inventory
+    SpringAPI-->>Web: Real JSON or HTTP error
+    Web-->>Player: Items, confirmed empty state, or failure state
+    Plugin->>Equipped: Requests equipped loadout
+    Equipped->>SpringAPI: GET /inventory/:steamId64
+    SpringAPI-->>Equipped: Persisted inventory
+    Equipped-->>Plugin: Converted loadout; failures retain non-2xx status
 ```
 
 ---
@@ -53,3 +50,7 @@ CREATE TABLE user_inventories (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
+
+An upstream failure is never converted into an empty inventory with HTTP 200.
+This prevents temporary unavailability from being interpreted as a legitimate
+loadout removal.

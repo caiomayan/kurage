@@ -3,25 +3,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { Brand } from "@/components/ui/Brand";
 import { SteamIcon } from "@/components/ui/PlatformIcons";
-import { RoleIcon } from "@/components/ui/RoleIcon";
 import { Avatar } from "@/components/ui/Avatar";
-import { CountryFlag } from "@/components/ui/CountryFlag";
-import { FaceitLevelIcon } from "@/components/ui/faceit-levels/FaceitLevelIcon";
-import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
 import { useAuth } from "@/lib/auth";
 import {
-  PiMagnifyingGlass,
   PiList,
   PiX,
-  PiCaretDown,
-  PiUser,
-  PiSignOut,
-  PiGear,
-  PiTrophy,
-  PiArrowRight,
 } from "react-icons/pi";
 import { cn } from "@/lib/utils";
 
@@ -36,13 +25,10 @@ export function Header() {
   const { user, isAuthenticated, loginWithSteam, logout, isLoading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [isClosingDropdown, setIsClosingDropdown] = useState(false);
 
   const closeDropdown = useCallback(() => {
-    setIsClosingDropdown(true);
     setTimeout(() => {
       setUserDropdownOpen(false);
-      setIsClosingDropdown(false);
     }, 200);
   }, []);
 
@@ -70,7 +56,7 @@ export function Header() {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [closeDropdown]);
 
   // Keyboard navigation for user dropdown
   const handleDropdownKeyDown = useCallback(
@@ -94,7 +80,7 @@ export function Header() {
         menuItems[nextIndex]?.focus();
       }
     },
-    []
+    [closeDropdown]
   );
 
   return (

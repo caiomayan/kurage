@@ -28,6 +28,15 @@ public class CookieUtils {
      * que gera o header Set-Cookie diretamente.
      */
     public static ResponseCookie buildResponseCookie(String name, String value, Duration maxAge, String domain) {
+        return buildResponseCookie(name, value, maxAge, domain, "/");
+    }
+
+    public static ResponseCookie buildResponseCookie(
+            String name,
+            String value,
+            Duration maxAge,
+            String domain,
+            String path) {
         // Assume localhost se o dominio foi resolvido para null pela nova função
         boolean isLocalhost = (domain == null);
 
@@ -35,7 +44,7 @@ public class CookieUtils {
                 .httpOnly(true)
                 .secure(!isLocalhost) // Desativa secure no localhost para funcionar via HTTP
                 .sameSite("Lax")
-                .path("/")
+                .path(path)
                 .maxAge(maxAge);
 
         if (!isLocalhost && !domain.isBlank()) {

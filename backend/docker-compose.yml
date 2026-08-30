@@ -2,47 +2,43 @@ services:
   db:
     image: postgres:16-alpine
     container_name: kurage_postgres
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-kuragedb}
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     deploy:
       resources:
         limits:
-          memory: 500M
+          memory: 1200M
 
   redis:
     image: redis:7-alpine
     container_name: kurage_redis
-    restart: always
-    ports:
-      - "6379:6379"
-    deploy:
-      resources:
-        limits:
-          memory: 200M
-
-  mongo:
-    image: mongo:6-jammy
-    container_name: kurage_mongo
-    restart: always
+    restart: unless-stopped
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin123}
-    ports:
-      - "27017:27017"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
     volumes:
-      - mongodata:/data/db
-    command: ["--wiredTigerCacheSizeGB", "0.25"]
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     deploy:
       resources:
         limits:
-          memory: 350M
+          memory: 384M
 
   api:
     image: ${KURAGE_API_IMAGE:-kurage-api:local}
@@ -50,51 +46,79 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: kurage_api
-    restart: always
+    init: true
+    restart: unless-stopped
     depends_on:
-      - db
-      - redis
-      - mongo
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${DB_NAME:-kuragedb}
-      - SPRING_DATASOURCE_USERNAME=${DB_USER:-postgres}
-      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-postgres}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${DB_NAME:?DB_NAME is required}
+      - SPRING_DATASOURCE_USERNAME=${DB_USER:?DB_USER is required}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
-      - SPRING_MONGODB_URI=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin123}@mongo:27017/kurage_notifications?authSource=admin
-      - STEAM_API_KEY=${STEAM_API_KEY}
-      - FACEIT_API_KEY=${FACEIT_API_KEY}
-      - JWT_SECRET=${JWT_SECRET:-d3d3LmNhaW9tYXlhbi5jb20uYnIubmFvLnRlbS5wYXJhbm9pYQ==}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
-      - BACKEND_URL=${BACKEND_URL:-http://localhost:8080}
-      - COOKIE_DOMAIN=${COOKIE_DOMAIN}
-      - GAME_SERVER_API_KEY=${GAME_SERVER_API_KEY:-}
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      - SPRING_DOCKER_COMPOSE_ENABLED=false
+      - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=${DB_POOL_MAX_SIZE:-10}
+      - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=${DB_POOL_MIN_IDLE:-2}
+      - JAVA_OPTS=${JAVA_OPTS:--Xms256m -Xmx1200m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError}
+      - STEAM_API_KEY=${STEAM_API_KEY:?STEAM_API_KEY is required}
+      - FACEIT_API_KEY=${FACEIT_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - FRONTEND_URL=${FRONTEND_URL:?FRONTEND_URL is required}
+      - FRONTEND_ADDITIONAL_ORIGINS=${FRONTEND_ADDITIONAL_ORIGINS:-}
+      - BACKEND_URL=${BACKEND_URL:?BACKEND_URL is required}
+      # Keep blank for host-only auth cookies on the API domain. A parent-domain
+      # cookie unnecessarily lets sibling subdomains overwrite session state.
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
+      - GAME_SERVER_API_KEY=${GAME_SERVER_API_KEY:?GAME_SERVER_API_KEY is required}
+      - GAME_SERVER_BOOTSTRAP_ENABLED=true
+      - FIXED_SERVER_ID=${FIXED_SERVER_ID:?FIXED_SERVER_ID is required}
+      - FIXED_SERVER_DISPLAY_NAME=${FIXED_SERVER_DISPLAY_NAME:?FIXED_SERVER_DISPLAY_NAME is required}
+      - FIXED_SERVER_HOSTNAME=${FIXED_SERVER_HOSTNAME:?FIXED_SERVER_HOSTNAME is required}
+      - FIXED_SERVER_PORT=${FIXED_SERVER_PORT:?FIXED_SERVER_PORT is required}
+      - FIXED_SERVER_MAX_PLAYERS=${FIXED_SERVER_MAX_PLAYERS:-10}
       - CLOUDFLARE_R2_ACCESS_KEY=${CLOUDFLARE_R2_ACCESS_KEY}
       - CLOUDFLARE_R2_SECRET_KEY=${CLOUDFLARE_R2_SECRET_KEY}
       - CLOUDFLARE_R2_ENDPOINT=${CLOUDFLARE_R2_ENDPOINT}
       - CLOUDFLARE_R2_BUCKET_NAME=${CLOUDFLARE_R2_BUCKET_NAME:-kurage-bucket}
       - CLOUDFLARE_R2_PUBLIC_URL=${CLOUDFLARE_R2_PUBLIC_URL}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
     deploy:
       resources:
         limits:
-          memory: 1000M
+          memory: 1600M
 
   caddy:
     image: caddy:2-alpine
     container_name: kurage_caddy
-    restart: always
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
 volumes:
   pgdata:
-  mongodata:
+  redisdata:
   caddy_data:
   caddy_config:

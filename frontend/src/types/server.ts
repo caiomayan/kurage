@@ -1,4 +1,5 @@
 export type ServerGameMode = "COMPETITIVO" | "RETAKE" | "DEATHMATCH" | "PRACTICE";
+export type GameServerKind = "FIXED" | "EPHEMERAL";
 
 export type RoundWinReason = "elimination" | "bomb_exploded" | "bomb_defused" | "time_out";
 
@@ -25,11 +26,13 @@ export interface CoachInfo {
 }
 
 export interface PlayerLiveStats {
-  kurageId: number;
+  kurageId?: number;
+  steamId64?: string;
+  isKurageMember: boolean;
   username: string;
   avatarUrl: string;
   isVerifiedPro: boolean;
-  kurageLevel: number;
+  kurageLevel?: number;
   faceitLevel?: number;
   role?: string;
   kills: number;
@@ -56,7 +59,7 @@ export interface LiveServerState {
   ip: string;
   map: string;
   mode: ServerGameMode;
-  tickrate: number;
+  tickrate?: number;
   status: "live" | "offline" | "warmup";
   maxPlayers: number;
   
@@ -107,9 +110,12 @@ export interface GameServer {
   hostname: string;
   port: number;
   gameMode: ServerGameMode | string;
+  serverKind: GameServerKind;
   currentMap: string;
   currentPlayers: number;
   maxPlayers: number;
+  ctScore: number;
+  trScore: number;
   isOnline: boolean;
   lastHeartbeat?: string | null;
 }

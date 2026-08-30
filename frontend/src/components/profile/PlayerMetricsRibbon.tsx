@@ -15,54 +15,54 @@ interface PlayerMetricsRibbonProps {
 }
 
 interface TierInfo {
-  tierLabel: "Ruim" | "Médio" | "Bom" | "Excelente" | "Calibrando";
+  tierLabel: "Ruim" | "Médio" | "Bom" | "Excelente" | "Sem dados";
   barPercent: number;
   barColor: string;
 }
 
-function getRatingTier(val: number, hasMatches: boolean): TierInfo {
-  if (!hasMatches) return { tierLabel: "Calibrando", barPercent: 0, barColor: "#666" };
-  if (val >= 1.25) return { tierLabel: "Excelente", barPercent: 95, barColor: "#a9c8c0" };
+function getRatingTier(val: number, hasData: boolean): TierInfo {
+  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
+  if (val >= 1.25) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
   if (val >= 1.05) return { tierLabel: "Bom", barPercent: 72, barColor: "#ededed" };
   if (val >= 0.90) return { tierLabel: "Médio", barPercent: 48, barColor: "#888888" };
   return { tierLabel: "Ruim", barPercent: 25, barColor: "#ef4444" };
 }
 
-function getKdTier(val: number, hasMatches: boolean): TierInfo {
-  if (!hasMatches) return { tierLabel: "Calibrando", barPercent: 0, barColor: "#666" };
-  if (val >= 1.30) return { tierLabel: "Excelente", barPercent: 95, barColor: "#a9c8c0" };
+function getKdTier(val: number, hasData: boolean): TierInfo {
+  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
+  if (val >= 1.30) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
   if (val >= 1.05) return { tierLabel: "Bom", barPercent: 72, barColor: "#ededed" };
   if (val >= 0.90) return { tierLabel: "Médio", barPercent: 48, barColor: "#888888" };
   return { tierLabel: "Ruim", barPercent: 25, barColor: "#ef4444" };
 }
 
-function getAdrTier(val: number, hasMatches: boolean): TierInfo {
-  if (!hasMatches) return { tierLabel: "Calibrando", barPercent: 0, barColor: "#666" };
-  if (val >= 88.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "#a9c8c0" };
+function getAdrTier(val: number, hasData: boolean): TierInfo {
+  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
+  if (val >= 88.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
   if (val >= 75.0) return { tierLabel: "Bom", barPercent: 72, barColor: "#ededed" };
   if (val >= 65.0) return { tierLabel: "Médio", barPercent: 48, barColor: "#888888" };
   return { tierLabel: "Ruim", barPercent: 25, barColor: "#ef4444" };
 }
 
-function getHsTier(val: number, hasMatches: boolean): TierInfo {
-  if (!hasMatches) return { tierLabel: "Calibrando", barPercent: 0, barColor: "#666" };
-  if (val >= 55.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "#a9c8c0" };
+function getHsTier(val: number, hasData: boolean): TierInfo {
+  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
+  if (val >= 55.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
   if (val >= 45.0) return { tierLabel: "Bom", barPercent: 70, barColor: "#ededed" };
   if (val >= 35.0) return { tierLabel: "Médio", barPercent: 45, barColor: "#888888" };
   return { tierLabel: "Ruim", barPercent: 22, barColor: "#ef4444" };
 }
 
-function getKastTier(val: number, hasMatches: boolean): TierInfo {
-  if (!hasMatches) return { tierLabel: "Calibrando", barPercent: 0, barColor: "#666" };
-  if (val >= 76.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "#a9c8c0" };
+function getKastTier(val: number, hasData: boolean): TierInfo {
+  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
+  if (val >= 76.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
   if (val >= 71.0) return { tierLabel: "Bom", barPercent: 72, barColor: "#ededed" };
   if (val >= 65.0) return { tierLabel: "Médio", barPercent: 48, barColor: "#888888" };
   return { tierLabel: "Ruim", barPercent: 25, barColor: "#ef4444" };
 }
 
-function getWinRateTier(val: number, hasMatches: boolean): TierInfo {
-  if (!hasMatches) return { tierLabel: "Calibrando", barPercent: 0, barColor: "#666" };
-  if (val >= 65.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "#a9c8c0" };
+function getWinRateTier(val: number, hasData: boolean): TierInfo {
+  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
+  if (val >= 65.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
   if (val >= 53.0) return { tierLabel: "Bom", barPercent: 70, barColor: "#ededed" };
   if (val >= 45.0) return { tierLabel: "Médio", barPercent: 45, barColor: "#888888" };
   return { tierLabel: "Ruim", barPercent: 22, barColor: "#ef4444" };
@@ -80,54 +80,67 @@ export function PlayerMetricsRibbon({
   const hasMatches = (stats?.matchesPlayed ?? 0) > 0;
 
   // Compute metrics from stats if provided
-  const computedRating = stats?.hltvRating ?? hltvRating ?? (hasMatches ? 1.0 : 0);
-  const computedKd = stats && stats.deaths > 0 ? stats.kills / stats.deaths : kdRatio ?? (hasMatches ? 1.0 : 0);
-  const computedAdr = stats && stats.roundsPlayed > 0 ? stats.totalDamage / stats.roundsPlayed : adr ?? 0;
-  const computedHs = stats && stats.kills > 0 ? (stats.headshots / stats.kills) * 100 : hsPercentage ?? 0;
-  const computedKast = stats?.kastPercentage ?? kastPercentage ?? 0;
-  const computedWinRate = stats && stats.matchesPlayed > 0 ? (stats.matchesWon / stats.matchesPlayed) * 100 : winRate ?? 0;
+  const computedRating = stats?.hltvRating ?? hltvRating ?? null;
+  const computedKd = stats && stats.deaths > 0
+    ? stats.kills / stats.deaths
+    : stats && stats.kills > 0
+      ? stats.kills
+      : kdRatio ?? (hasMatches ? 0 : null);
+  const computedAdr = stats && stats.roundsPlayed > 0 ? stats.totalDamage / stats.roundsPlayed : adr;
+  const computedHs = stats && stats.kills > 0 ? (stats.headshots / stats.kills) * 100 : hsPercentage;
+  const computedKast = stats?.kastPercentage ?? kastPercentage ?? null;
+  const computedWinRate = stats && stats.matchesPlayed > 0
+    ? (stats.matchesWon / stats.matchesPlayed) * 100
+    : winRate;
+
+  const hasRating = hasMatches && computedRating != null;
+  const hasKd = hasMatches && computedKd != null;
+  const hasAdr = hasMatches && computedAdr != null;
+  const hasHs = hasMatches && computedHs != null;
+  const hasKast = hasMatches && computedKast != null;
+  const hasWinRate = hasMatches && computedWinRate != null;
 
   const metrics = [
     {
       label: "Rating 2.0",
-      value: hasMatches && computedRating > 0 ? computedRating.toFixed(2) : "-",
-      colorClass: "text-[#a9c8c0]",
-      tier: getRatingTier(computedRating, hasMatches),
+      value: hasRating ? computedRating.toFixed(2) : "—",
+      colorClass: "text-[var(--kurage-accent)]",
+      tier: getRatingTier(computedRating ?? 0, hasRating),
       description: "HLTV Impacto",
     },
     {
       label: "K/D Ratio",
-      value: hasMatches && computedKd > 0 ? computedKd.toFixed(2) : "-",
-      colorClass: computedKd >= 1.3 ? "text-white" : computedKd >= 1.0 ? "text-stone-300" : "text-stone-400",
-      tier: getKdTier(computedKd, hasMatches),
+      value: hasKd ? computedKd.toFixed(2) : "—",
+      colorClass: (computedKd ?? 0) >= 1.3 ? "text-white" : (computedKd ?? 0) >= 1.0 ? "text-stone-300" : "text-stone-400",
+      tier: getKdTier(computedKd ?? 0, hasKd),
       description: "Eliminações",
     },
     {
       label: "Dano / Round",
-      value: hasMatches && computedAdr > 0 ? computedAdr.toFixed(1) : "-",
+      value: hasAdr ? computedAdr.toFixed(1) : "—",
       colorClass: "text-white",
-      tier: getAdrTier(computedAdr, hasMatches),
+      tier: getAdrTier(computedAdr ?? 0, hasAdr),
       description: "ADR Médio",
     },
     {
       label: "Headshot %",
-      value: hasMatches && computedHs > 0 ? `${computedHs.toFixed(1)}%` : "-",
+      value: hasHs ? `${computedHs.toFixed(1)}%` : "—",
       colorClass: "text-white",
-      tier: getHsTier(computedHs, hasMatches),
+      tier: getHsTier(computedHs ?? 0, hasHs),
       description: "Precisão",
     },
     {
       label: "KAST %",
-      value: hasMatches && computedKast > 0 ? `${computedKast.toFixed(1)}%` : "-",
+      value: hasKast ? `${computedKast.toFixed(1)}%` : "—",
       colorClass: "text-white",
-      tier: getKastTier(computedKast, hasMatches),
+      tier: getKastTier(computedKast ?? 0, hasKast),
       description: "Consistência",
     },
     {
       label: "Win Rate",
-      value: hasMatches ? `${computedWinRate.toFixed(1)}%` : "-",
+      value: hasWinRate ? `${computedWinRate.toFixed(1)}%` : "—",
       colorClass: "text-white",
-      tier: getWinRateTier(computedWinRate, hasMatches),
+      tier: getWinRateTier(computedWinRate ?? 0, hasWinRate),
       description: "Vitórias",
     },
   ];
@@ -140,7 +153,7 @@ export function PlayerMetricsRibbon({
             key={metric.label}
             className={cn(
               "group/cell flex flex-col items-center justify-center p-4 sm:p-5 text-center transition-colors hover:bg-white/[0.02]",
-              idx === 0 && "bg-[#a9c8c0]/[0.02]"
+              idx === 0 && "bg-[var(--kurage-accent)]/[0.02]"
             )}
           >
             {/* Metric Title */}

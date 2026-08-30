@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { CS2Economy, CS2_ITEMS, CS2Inventory } from "@ianlucas/cs2-lib";
+import { CS2BaseInventoryItem, CS2Economy, CS2_ITEMS, CS2Inventory } from "@ianlucas/cs2-lib";
+import { API_BASE_URL } from "@/lib/constants";
 
 // Initialize CS2Economy once
 try {
@@ -11,6 +12,7 @@ try {
 interface StickerItemDTO {
   slot: number;
   def: number;
+  schema?: number;
   wear?: number;
   rotation?: number;
   x?: number;
@@ -38,29 +40,42 @@ interface InventoryItemDTO {
   keychains?: KeychainItemDTO[] | null;
 }
 
-function formatStickers(stickers: any): StickerItemDTO[] | null {
+type StickerData = NonNullable<CS2BaseInventoryItem["stickers"]>[string];
+type KeychainData = NonNullable<CS2BaseInventoryItem["keychains"]>[string];
+type EconomyItemWithVariant = { variantIndex?: number };
+
+function getAttachmentVariantIndex(itemId: number) {
+  const economyItem = CS2Economy.get(itemId) as EconomyItemWithVariant | undefined;
+  return economyItem?.variantIndex;
+}
+
+function formatStickers(
+  stickers: Map<number, StickerData> | Record<string, StickerData> | undefined,
+): StickerItemDTO[] | null {
   if (!stickers) return null;
   const list: StickerItemDTO[] = [];
   if (stickers instanceof Map) {
     for (const [slot, s] of stickers.entries()) {
-      const econItem = CS2Economy.get(s.id);
-      const def = (econItem as any)?.def ?? econItem?.definitionIndex ?? s.id;
+      const def = getAttachmentVariantIndex(s.id);
+      if (def === undefined) continue;
       list.push({
         slot: Number(slot),
         def: Number(def),
+        schema: s.schema,
         wear: s.wear,
         rotation: s.rotation,
         x: s.x,
         y: s.y,
       });
     }
-  } else if (typeof stickers === "object") {
-    for (const [slot, s] of Object.entries(stickers as Record<string, any>)) {
-      const econItem = CS2Economy.get(s.id);
-      const def = (econItem as any)?.def ?? econItem?.definitionIndex ?? s.id;
+  } else {
+    for (const [slot, s] of Object.entries(stickers)) {
+      const def = getAttachmentVariantIndex(s.id);
+      if (def === undefined) continue;
       list.push({
         slot: Number(slot),
         def: Number(def),
+        schema: s.schema,
         wear: s.wear,
         rotation: s.rotation,
         x: s.x,
@@ -71,13 +86,15 @@ function formatStickers(stickers: any): StickerItemDTO[] | null {
   return list.length > 0 ? list : null;
 }
 
-function formatKeychains(keychains: any): KeychainItemDTO[] | null {
+function formatKeychains(
+  keychains: Map<number, KeychainData> | Record<string, KeychainData> | undefined,
+): KeychainItemDTO[] | null {
   if (!keychains) return null;
   const list: KeychainItemDTO[] = [];
   if (keychains instanceof Map) {
     for (const [slot, k] of keychains.entries()) {
-      const econItem = CS2Economy.get(k.id);
-      const def = (econItem as any)?.def ?? econItem?.definitionIndex ?? k.id;
+      const def = getAttachmentVariantIndex(k.id);
+      if (def === undefined) continue;
       list.push({
         slot: Number(slot),
         def: Number(def),
@@ -87,10 +104,10 @@ function formatKeychains(keychains: any): KeychainItemDTO[] | null {
         z: k.z,
       });
     }
-  } else if (typeof keychains === "object") {
-    for (const [slot, k] of Object.entries(keychains as Record<string, any>)) {
-      const econItem = CS2Economy.get(k.id);
-      const def = (econItem as any)?.def ?? econItem?.definitionIndex ?? k.id;
+  } else {
+    for (const [slot, k] of Object.entries(keychains)) {
+      const def = getAttachmentVariantIndex(k.id);
+      if (def === undefined) continue;
       list.push({
         slot: Number(slot),
         def: Number(def),
@@ -117,22 +134,15 @@ export async function GET(
   }
 
   try {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-    const res = await fetch(`${backendUrl}/inventory/${steamId64}`, {
+    const res = await fetch(`${API_BASE_URL}/inventory/${steamId64}`, {
       cache: "no-store",
     });
 
     if (!res.ok) {
-      return NextResponse.json({
-        agents: {},
-        collectible: null,
-        ctWeapons: {},
-        tWeapons: {},
-        gloves: {},
-        knives: {},
-        graffiti: null,
-        musicKit: null,
-      });
+      return NextResponse.json(
+        { error: res.status === 404 ? "inventory_not_found" : "inventory_upstream_unavailable" },
+        { status: res.status === 404 ? 404 : 502 },
+      );
     }
 
     const inventoryData = await res.json();
@@ -171,7 +181,9 @@ export async function GET(
         keychains: formatKeychains(item.keychains),
       };
 
-      if (item.type === "melee") {
+      if (item.type === "musickit") {
+        response.musicKit = invItem;
+      } else if (item.type === "melee") {
         if (item.equippedCT) response.knives["3"] = invItem;
         if (item.equippedT) response.knives["2"] = invItem;
       } else if (item.type === "glove") {
@@ -187,20 +199,11 @@ export async function GET(
     }
 
     return NextResponse.json(response);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error generating equipped inventory for CS2 plugin:", error);
     return NextResponse.json(
-      {
-        agents: {},
-        collectible: null,
-        ctWeapons: {},
-        tWeapons: {},
-        gloves: {},
-        knives: {},
-        graffiti: null,
-        musicKit: null,
-      },
-      { status: 200 }
+      { error: "inventory_upstream_unavailable" },
+      { status: 503 },
     );
   }
 }

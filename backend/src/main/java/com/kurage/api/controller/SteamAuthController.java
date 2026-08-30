@@ -3,6 +3,7 @@ package com.kurage.api.controller;
 import com.kurage.api.config.AppConstants;
 import com.kurage.api.domain.User;
 import com.kurage.api.service.SteamAuthService;
+import com.kurage.api.service.SteamLoginStateService;
 import com.kurage.api.service.UserService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.UUID;
 
@@ -37,11 +40,13 @@ public class SteamAuthController {
     private String cookieDomain;
 
     private final SteamAuthService steamAuthService;
+    private final SteamLoginStateService steamLoginStateService;
     private final UserService userService;
     private final com.kurage.api.service.RefreshTokenService refreshTokenService;
 
     @GetMapping
     public void loginWithSteam(@RequestParam(defaultValue = "/") String returnUrl,
+                               HttpServletRequest request,
                                HttpServletResponse response) throws IOException {
         String safeReturnUrl = sanitizeReturnUrl(returnUrl);
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -49,7 +54,18 @@ public class SteamAuthController {
             response.sendRedirect(frontendUrl + safeReturnUrl);
             return;
         }
-        response.sendRedirect(steamAuthService.buildSteamLoginUrl(safeReturnUrl));
+
+        String state = steamLoginStateService.createState(safeReturnUrl);
+        String actualDomain = com.kurage.api.util.CookieUtils.resolveDomain(request, cookieDomain);
+        ResponseCookie stateCookie = com.kurage.api.util.CookieUtils.buildResponseCookie(
+                AppConstants.STEAM_LOGIN_STATE_COOKIE_NAME,
+                state,
+                Duration.ofMinutes(10),
+                actualDomain,
+                "/auth/steam/callback"
+        );
+        response.addHeader(HttpHeaders.SET_COOKIE, stateCookie.toString());
+        response.sendRedirect(steamAuthService.buildSteamLoginUrl(state));
     }
 
     @GetMapping("/callback")
@@ -57,13 +73,33 @@ public class SteamAuthController {
         try {
             log.info("Steam callback received");
 
-            String steamId64 = steamAuthService.validateSteamLogin(request.getParameterMap());
+            String state = request.getParameter("state");
+            String cookieState = findCookie(request, AppConstants.STEAM_LOGIN_STATE_COOKIE_NAME);
+            clearSteamStateCookie(request, response);
+            if (!secureEquals(state, cookieState)) {
+                throw new IllegalArgumentException("Steam login state mismatch");
+            }
+
+            String storedReturnUrl = steamLoginStateService.consumeState(state);
+            if (storedReturnUrl == null) {
+                throw new IllegalArgumentException("Steam login state is invalid, expired or already consumed");
+            }
+            String redirectTo = sanitizeReturnUrl(storedReturnUrl);
+
+            String steamId64 = steamAuthService.validateSteamLogin(
+                    request.getParameterMap(),
+                    steamAuthService.buildCallbackUrl(state)
+            );
             log.info("Steam validation succeeded for steamId64={}", steamId64);
 
             var profile = steamAuthService.fetchSteamProfile(steamId64);
-            String clientIp = getClientIp(request);
             String cfCountry = request.getHeader("CF-IPCountry");
-            User user = userService.getOrCreateUser(steamId64, profile.personaname(), profile.avatarfull(), clientIp, cfCountry);
+            User user = userService.getOrCreateUser(steamId64, profile.personaname(), profile.avatarfull(), cfCountry);
+            if (!user.isActiveAccount()) {
+                log.warn("Steam login rejected for suspended account userId={}", user.getId());
+                response.sendRedirect(frontendUrl + "/?error=account_suspended");
+                return;
+            }
 
             String deviceId = getOrCreateDeviceId(request, response);
             String userAgent = request.getHeader("User-Agent");
@@ -74,22 +110,20 @@ public class SteamAuthController {
             ResponseCookie refreshCookie = com.kurage.api.util.CookieUtils.buildResponseCookie(AppConstants.REFRESH_COOKIE_NAME, refreshToken, Duration.ofDays(30), actualDomain);
             response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
-            String redirectTo = sanitizeReturnUrl(request.getParameter("returnUrl"));
-
             String redirectLocation = frontendUrl + redirectTo;
             log.info("Redirecting to frontend after Steam authentication");
             response.sendRedirect(redirectLocation);
 
         } catch (Exception e) {
             log.error("Steam authentication failed in controller", e);
-            response.sendRedirect(frontendUrl + "/login?error=steam_validation_failed");
+            response.sendRedirect(frontendUrl + "/?error=steam_validation_failed");
         }
     }
 
     private String getOrCreateDeviceId(HttpServletRequest request, HttpServletResponse response) {
         if (request.getCookies() != null) {
             for (Cookie cookie : request.getCookies()) {
-                if ("device_id".equals(cookie.getName())) {
+                if (AppConstants.DEVICE_COOKIE_NAME.equals(cookie.getName())) {
                     return cookie.getValue();
                 }
             }
@@ -97,7 +131,7 @@ public class SteamAuthController {
 
         String newDeviceId = UUID.randomUUID().toString();
         String actualDomain = com.kurage.api.util.CookieUtils.resolveDomain(request, cookieDomain);
-        ResponseCookie deviceCookie = com.kurage.api.util.CookieUtils.buildResponseCookie("device_id", newDeviceId, Duration.ofDays(365), actualDomain);
+        ResponseCookie deviceCookie = com.kurage.api.util.CookieUtils.buildResponseCookie(AppConstants.DEVICE_COOKIE_NAME, newDeviceId, Duration.ofDays(365), actualDomain);
         response.addHeader(HttpHeaders.SET_COOKIE, deviceCookie.toString());
 
         return newDeviceId;
@@ -130,11 +164,37 @@ public class SteamAuthController {
         return returnUrl;
     }
 
-    private String getClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
+    private static String findCookie(HttpServletRequest request, String name) {
+        if (request.getCookies() == null) {
+            return null;
         }
-        return request.getRemoteAddr();
+        for (Cookie cookie : request.getCookies()) {
+            if (name.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
+
+    private void clearSteamStateCookie(HttpServletRequest request, HttpServletResponse response) {
+        String actualDomain = com.kurage.api.util.CookieUtils.resolveDomain(request, cookieDomain);
+        ResponseCookie clearState = com.kurage.api.util.CookieUtils.buildResponseCookie(
+                AppConstants.STEAM_LOGIN_STATE_COOKIE_NAME,
+                "",
+                Duration.ZERO,
+                actualDomain,
+                "/auth/steam/callback"
+        );
+        response.addHeader(HttpHeaders.SET_COOKIE, clearState.toString());
+    }
+
+    private static boolean secureEquals(String left, String right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                left.getBytes(StandardCharsets.UTF_8),
+                right.getBytes(StandardCharsets.UTF_8)
+        );
     }
 }

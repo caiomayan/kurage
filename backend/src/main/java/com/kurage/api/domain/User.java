@@ -41,6 +41,21 @@ public class User extends Auditable {
 
     @Builder.Default
     @Enumerated(EnumType.STRING)
+    @Column(name = "account_status", nullable = false, length = 20)
+    private AccountStatus accountStatus = AccountStatus.ACTIVE;
+
+    @Column(name = "suspended_at")
+    private OffsetDateTime suspendedAt;
+
+    @Column(name = "suspension_reason", length = 500)
+    private String suspensionReason;
+
+    public boolean isActiveAccount() {
+        return accountStatus == null || accountStatus == AccountStatus.ACTIVE;
+    }
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
     @Column(name = "primary_function", nullable = false, length = 20)
     private PlayerFunction primaryFunction = PlayerFunction.CORINGA;
 
@@ -51,6 +66,17 @@ public class User extends Auditable {
     @Column(name = "country", length = 2)
     private String country;
 
+    /**
+     * Optional private contact channels. They are deliberately absent from
+     * public profile responses and are not used for outbound messages until a
+     * future verification and consent flow is implemented.
+     */
+    @Column(name = "email", length = 254)
+    private String email;
+
+    @Column(name = "phone_e164", length = 16)
+    private String phoneE164;
+
     @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(name = "subscription_tier", nullable = false, length = 10)
@@ -58,6 +84,16 @@ public class User extends Auditable {
 
     @Column(name = "subscription_expires_at")
     private OffsetDateTime subscriptionExpiresAt;
+
+    public SubscriptionTier getEffectiveSubscriptionTier() {
+        if (subscriptionTier == null || subscriptionTier == SubscriptionTier.FREE) {
+            return SubscriptionTier.FREE;
+        }
+        if (subscriptionExpiresAt != null && !subscriptionExpiresAt.isAfter(OffsetDateTime.now())) {
+            return SubscriptionTier.FREE;
+        }
+        return subscriptionTier;
+    }
 
     @Builder.Default
     @Column(name = "is_verified_pro", nullable = false)

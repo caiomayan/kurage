@@ -12,10 +12,16 @@ public class KurageCoreConfig : BasePluginConfig
     public string ServerId { get; set; } = "b1a2c3d4-0000-0000-0000-000000000001";
 
     [JsonPropertyName("ServerApiKey")]
-    public string ServerApiKey { get; set; } = "kurage-secret-server-key";
+    public string ServerApiKey { get; set; } = string.Empty;
 
-    [JsonPropertyName("DefaultGameMode")]
-    public string DefaultGameMode { get; set; } = "COMPETITIVE_5V5";
+    [JsonPropertyName("GameMode")]
+    public string GameMode { get; set; } = "RETAKE";
+
+    [JsonPropertyName("ServerKind")]
+    public string ServerKind { get; set; } = "FIXED";
+
+    [JsonPropertyName("ServerDisplayName")]
+    public string ServerDisplayName { get; set; } = "Kurage Retake #1";
 
     [JsonPropertyName("HeartbeatIntervalSeconds")]
     public int HeartbeatIntervalSeconds { get; set; } = 30;
@@ -23,9 +29,6 @@ public class KurageCoreConfig : BasePluginConfig
     [JsonPropertyName("EnableWelcomeChatMessages")]
     public bool EnableWelcomeChatMessages { get; set; } = true;
 
-    [JsonPropertyName("ChatPrefix")]
-    public string ChatPrefix { get; set; } = "[{Aqua}KURAGE{Default}]";
-
-    [JsonPropertyName("WebsiteUrl")]
-    public string WebsiteUrl { get; set; } = "https://kurage.caiomayan.com";
+    [JsonPropertyName("ExtensionSettings")]
+    public Dictionary<string, string> ExtensionSettings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

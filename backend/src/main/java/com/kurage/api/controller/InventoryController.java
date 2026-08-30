@@ -42,10 +42,10 @@ public class InventoryController {
     }
 
     @PutMapping({"/inventory/me", "/api/inventory/me", "/api/cstrike/inventory/me"})
-    public ResponseEntity<Void> updateInventory(
+    public ResponseEntity<JsonNode> updateInventory(
             @AuthenticationPrincipal User user,
             @Valid @RequestBody UpdateInventoryRequest request) {
-        inventoryService.updateInventory(user, request.getItems());
-        return ResponseEntity.noContent().build();
+        JsonNode confirmedInventory = inventoryService.updateInventory(user, request.getItems());
+        return ResponseEntity.ok(confirmedInventory);
     }
 }

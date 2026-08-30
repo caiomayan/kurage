@@ -13,6 +13,7 @@ import java.io.Serializable;
 @AllArgsConstructor
 public class ServerPlayerResponse implements Serializable {
     private Long kurageId;
+    private Boolean isKurageMember;
     private String steamId64;
     private String username;
     private String avatarUrl;

@@ -112,33 +112,30 @@ None may silently become zero, `#1`, ELO 2000, or an empty inventory.
 
 ## 5. One commercial model
 
-Plans are monthly and belong to the paying user. A server may be shared with a
-team, while its financial owner and consumption remain explicit. The backend
-returns concrete entitlements; the frontend never authorizes from a plan name.
+There is one platform-wide monthly membership tied to the player's passport.
+The backend returns concrete entitlements; the frontend never grants access from
+visual decoration alone.
 
 | Plan | Monthly price | Launch entitlements |
 |---|---:|---|
-| FREE | R$0 | passport, basic ranking, 30-day history, join/create 1 team, virtual inventory |
-| PLUS | R$19 | FREE + 12-month history, personal analytics, profile visitors and customization |
-| PRO | R$49 | PLUS + advanced management for 1 team, team analytics, control-plane access and provisioning priority |
-| MAX | R$129 | PRO + up to 3 managed teams, advanced audit/analytics, quota-based export/API and priority support |
+| Free | R$0 | passport, ranking, teams, public servers, and virtual inventory |
+| Maré | To be set before checkout | global coral theme, Maré badge, profile visitors, extended history and analytics, ranking filters, priority in official queues, and early access |
 
 Commercial rules:
 
 - Mercado Pago billing in BRL;
 - the permanent free tier replaces a trial;
 - no annual billing at launch;
-- server usage is neither unlimited nor included in subscriptions;
-- credits: **R$49 for 10 server hours**, metered by minute with auto-stop;
+- priority never removes an active player or changes rules, damage, economy, or match outcomes;
+- benefits cover the whole platform and are not tied only to Retake;
 - only an idempotent webhook confirms payment, never the browser redirect;
 - downgrade preserves data but reduces access/action to new plan limits;
 - grace and cancellation follow clear terms and provider state;
-- `isVerifiedPro` is manual/editorial and independent of PRO/MAX;
+- `isVerifiedPro` is manual/editorial and independent of Maré membership;
 - the inventory simulator is free and has no economic value.
 
-Credit pricing must be revalidated against exchange rates, taxes, payment fees,
-provider cost, and support before each catalog change. The listed price is a
-versioned commercial hypothesis, not authorization to bypass the launch gate.
+Price, taxes, gateway fees, and support cost must be validated before checkout is
+enabled. A catalog entry in code does not authorize billing.
 
 ## 6. Unit economics and goals
 
@@ -399,4 +396,3 @@ Kurage leaves the prototype stage when a new captain can, without founder help:
 
 Until this passes E2E, the correct external label is **technical alpha / private
 beta**, never production SaaS.
-

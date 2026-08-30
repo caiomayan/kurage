@@ -15,7 +15,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,7 +53,7 @@ public class TeamController {
     public ResponseEntity<TeamResponse> updateAvatar(
             @PathVariable UUID id,
             @RequestParam("file") MultipartFile file,
-            @AuthenticationPrincipal User user) throws IOException {
+            @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(teamService.updateTeamAvatar(id, user.getId(), file));
     }
 

@@ -1,6 +1,9 @@
 package com.kurage.api.exception;
 
 import com.kurage.api.dto.response.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -8,12 +11,14 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
     @ExceptionHandler(UsernameNotFoundException.class)
     public ResponseEntity<ApiResponse> handleUsernameNotFoundException(UsernameNotFoundException e) {
@@ -68,10 +73,26 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.create(404, "Rota ou recurso não encontrado"));
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException exception) {
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
+                .body(ApiResponse.create(
+                        HttpStatus.CONTENT_TOO_LARGE.value(),
+                        "A imagem deve ter no máximo 5 MB."
+                ));
+    }
+
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, DataIntegrityViolationException.class})
+    public ResponseEntity<ApiResponse> handleConcurrentModification(Exception e) {
+        log.warn("Conflicting concurrent write rejected: {}", e.getClass().getSimpleName());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.create(409, "Os dados foram alterados por outra operação. Atualize a página e tente novamente."));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse> handleGenericException(Exception e) {
-        // Loga o erro no console do servidor para você debugar, mas NÃO vaza pro frontend
-        e.printStackTrace();
+        log.error("Unhandled request failure", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.create(500, "Erro interno no servidor"));
     }

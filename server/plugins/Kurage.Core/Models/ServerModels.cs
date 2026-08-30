@@ -13,8 +13,17 @@ public class ServerHeartbeatPayload
     [JsonPropertyName("maxPlayers")]
     public int MaxPlayers { get; set; }
 
+    [JsonPropertyName("ctScore")]
+    public int CtScore { get; set; }
+
+    [JsonPropertyName("trScore")]
+    public int TrScore { get; set; }
+
     [JsonPropertyName("gameMode")]
     public string? GameMode { get; set; }
+
+    [JsonPropertyName("serverKind")]
+    public string? ServerKind { get; set; }
 
     [JsonPropertyName("players")]
     public List<ServerPlayerPayload>? Players { get; set; }
@@ -70,13 +79,18 @@ public class PlayerProfileSummary
     [JsonPropertyName("stats")]
     public PlayerStatsData? Stats { get; set; }
 
-    public int KurageElo => Stats?.KurageElo ?? 2000;
+    public int? KurageElo => Stats?.KurageElo;
+
+    public int? KurageLevel => Stats?.KurageLevel;
 }
 
 public class PlayerStatsData
 {
     [JsonPropertyName("kurageElo")]
-    public int KurageElo { get; set; } = 2000;
+    public int? KurageElo { get; set; }
+
+    [JsonPropertyName("kurageLevel")]
+    public int? KurageLevel { get; set; }
 
     [JsonPropertyName("kills")]
     public int Kills { get; set; }

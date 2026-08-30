@@ -1,12 +1,16 @@
 package com.kurage.api.controller;
 
 import com.kurage.api.domain.User;
+import com.kurage.api.dto.request.UpdateContactRequest;
+import com.kurage.api.dto.request.AvatarCropRequest;
 import com.kurage.api.dto.request.UpdateFunctionsRequest;
 import com.kurage.api.dto.response.HovercardResponse;
 import com.kurage.api.dto.response.ProfileVisitorResponse;
 import com.kurage.api.dto.response.TeamInvitationResponse;
 import com.kurage.api.dto.response.TeamResponse;
 import com.kurage.api.dto.response.UserResponse;
+import com.kurage.api.dto.response.UserContactResponse;
+import com.kurage.api.dto.response.SteamAvatarSourceResponse;
 import com.kurage.api.service.ProfileVisitService;
 import com.kurage.api.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -14,8 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.validation.Valid;
 
-import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -63,6 +67,14 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/hovercard")
+    public ResponseEntity<HovercardResponse> getHovercardByUsername(
+            @RequestParam String username) {
+        return userService.getHovercardByUsername(username)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/me/visitors")
     public ResponseEntity<List<ProfileVisitorResponse>> getMyVisitors(
             @AuthenticationPrincipal User user,
@@ -74,11 +86,20 @@ public class UserController {
     public ResponseEntity<UserResponse> updateAvatar(
             @AuthenticationPrincipal User user,
             @RequestParam("file") MultipartFile file) {
-        try {
-            return ResponseEntity.ok(userService.updateAvatar(user, file));
-        } catch (IOException e) {
-            return ResponseEntity.internalServerError().build();
-        }
+        return ResponseEntity.ok(userService.updateAvatar(user, file));
+    }
+
+    @GetMapping("/me/steam-avatar")
+    public ResponseEntity<SteamAvatarSourceResponse> getSteamAvatarSource(
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(userService.getSteamAvatarSource(user));
+    }
+
+    @PostMapping("/me/avatar/steam")
+    public ResponseEntity<UserResponse> updateAvatarFromSteam(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody AvatarCropRequest crop) {
+        return ResponseEntity.ok(userService.updateAvatarFromSteam(user, crop));
     }
 
     @PutMapping("/me/username")
@@ -99,6 +120,19 @@ public class UserController {
             return ResponseEntity.badRequest().build();
         }
         return ResponseEntity.ok(userService.updateCountry(user, country != null ? country.trim() : null));
+    }
+
+    /** Private contact data for future verified email and WhatsApp channels. */
+    @GetMapping("/me/contact")
+    public ResponseEntity<UserContactResponse> getMyContact(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(userService.getContact(user));
+    }
+
+    @PutMapping("/me/contact")
+    public ResponseEntity<UserContactResponse> updateMyContact(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody UpdateContactRequest request) {
+        return ResponseEntity.ok(userService.updateContact(user, request.email(), request.phoneNumber()));
     }
 
     @PutMapping("/me/steam-sync")

@@ -8,28 +8,51 @@ import React, {
   useCallback,
   ReactNode,
 } from "react";
-import { User } from "@/types/user";
-import { api, getAccessToken, setAccessToken, refreshToken } from "@/lib/api";
+import { UserWithStats } from "@/types/user";
+import {
+  ApiError,
+  api,
+  getAccessToken,
+  setAccessToken,
+  refreshToken,
+} from "@/lib/api";
 import { REDIRECT_STORAGE_KEY, API_BASE_URL } from "@/lib/constants";
 
 export { REDIRECT_STORAGE_KEY };
 
 interface AuthContextType {
-  user: User | null;
+  user: UserWithStats | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   loginWithSteam: (returnTo?: string) => void;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<User | null>;
+  refreshUser: () => Promise<UserWithStats | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function isUnauthenticated(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserWithStats | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const fetchCurrentUser = useCallback(async (): Promise<User | null> => {
+  useEffect(() => {
+    const root = document.documentElement;
+    if (user?.subscriptionTier === "MARE") {
+      root.dataset.kurageTheme = "mare";
+    } else {
+      delete root.dataset.kurageTheme;
+    }
+
+    return () => {
+      delete root.dataset.kurageTheme;
+    };
+  }, [user?.subscriptionTier]);
+
+  const fetchCurrentUser = useCallback(async (): Promise<UserWithStats | null> => {
     let token = getAccessToken();
 
     // If no in-memory token exists, try bootstrap via HttpOnly cookie
@@ -43,12 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const currentUser = await api.get<User>("/users/me");
+      const currentUser = await api.get<UserWithStats>("/users/me");
       setUser(currentUser);
       return currentUser;
-    } catch {
-      setUser(null);
-      setAccessToken(null);
+    } catch (error) {
+      // Do not discard a valid in-memory session for a temporary API failure.
+      // Only an explicit unauthenticated response means the session is gone.
+      if (isUnauthenticated(error)) {
+        setUser(null);
+        setAccessToken(null);
+      }
       return null;
     }
   }, []);
@@ -64,13 +91,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (token) {
-          const currentUser = await api.get<User>("/users/me");
+          const currentUser = await api.get<UserWithStats>("/users/me");
           if (isMounted) {
             setUser(currentUser);
           }
         }
-      } catch {
-        if (isMounted) {
+      } catch (error) {
+        if (isMounted && isUnauthenticated(error)) {
           setUser(null);
           setAccessToken(null);
         }

@@ -2,6 +2,7 @@ package com.kurage.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kurage.api.dto.redis.RefreshTokenSession;
+import com.kurage.api.util.HashUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.SetOperations;
@@ -42,17 +43,19 @@ class RefreshTokenServiceTest {
                 null,
                 null
         );
-        when(valueOperations.get("refresh:current-token"))
+        String currentHash = HashUtils.sha256("current-token");
+        String previousHash = HashUtils.sha256("previous-token");
+        when(valueOperations.get("refresh:" + currentHash))
                 .thenReturn(new ObjectMapper().writeValueAsString(session));
         when(setOperations.members("family:family-id"))
-                .thenReturn(Set.of("current-token", "previous-token"));
+                .thenReturn(Set.of(currentHash, previousHash));
 
         service.revokeRefreshToken("current-token");
 
-        verify(redisTemplate).delete("refresh:current-token");
-        verify(redisTemplate).delete("refresh_grace:current-token");
-        verify(redisTemplate).delete("refresh:previous-token");
-        verify(redisTemplate).delete("refresh_grace:previous-token");
+        verify(redisTemplate).delete("refresh:" + currentHash);
+        verify(redisTemplate).delete("refresh_grace:" + currentHash);
+        verify(redisTemplate).delete("refresh:" + previousHash);
+        verify(redisTemplate).delete("refresh_grace:" + previousHash);
         verify(redisTemplate).delete("family:family-id");
     }
 }

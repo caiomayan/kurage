@@ -23,6 +23,9 @@ public class EquippedKeychainDto {
     @JsonProperty("seed")
     private Integer seed;
 
+    @JsonProperty("sticker")
+    private Integer sticker;
+
     @JsonProperty("x")
     private Float x;
 

@@ -10,10 +10,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final RateLimitInterceptor rateLimitInterceptor;
+    private final CookieAuthOriginInterceptor cookieAuthOriginInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(rateLimitInterceptor)
                 .addPathPatterns("/**");
+        registry.addInterceptor(cookieAuthOriginInterceptor)
+                .addPathPatterns("/auth/refresh", "/auth/logout");
     }
 }

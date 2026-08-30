@@ -4,37 +4,19 @@ import { hasSubscriptionFeature } from "../types/user.ts";
 import { formatRelativeTime } from "../types/profile.ts";
 
 test("1. Subscription Features: hasSubscriptionFeature mapping", () => {
-  // FREE tier
+  // Free access
   assert.equal(hasSubscriptionFeature("FREE", "PROFILE_VISITORS"), false);
-  assert.equal(hasSubscriptionFeature("FREE", "PLUS_BADGE"), false);
+  assert.equal(hasSubscriptionFeature("FREE", "MARE_BADGE"), false);
   assert.equal(hasSubscriptionFeature("FREE", "ADVANCED_STATS"), false);
-  assert.equal(hasSubscriptionFeature("FREE", "PRO_BADGE"), false);
-  assert.equal(hasSubscriptionFeature("FREE", "MAX_BADGE"), false);
 
-  // PLUS tier
-  assert.equal(hasSubscriptionFeature("PLUS", "PROFILE_VISITORS"), true);
-  assert.equal(hasSubscriptionFeature("PLUS", "PLUS_BADGE"), true);
-  assert.equal(hasSubscriptionFeature("PLUS", "ADVANCED_STATS"), false);
-  assert.equal(hasSubscriptionFeature("PLUS", "PRO_BADGE"), false);
-  assert.equal(hasSubscriptionFeature("PLUS", "MAX_BADGE"), false);
-
-  // PRO tier
-  assert.equal(hasSubscriptionFeature("PRO", "PROFILE_VISITORS"), true);
-  assert.equal(hasSubscriptionFeature("PRO", "PLUS_BADGE"), true);
-  assert.equal(hasSubscriptionFeature("PRO", "ADVANCED_STATS"), true);
-  assert.equal(hasSubscriptionFeature("PRO", "RANKING_FILTERS"), true);
-  assert.equal(hasSubscriptionFeature("PRO", "PRO_BADGE"), true);
-  assert.equal(hasSubscriptionFeature("PRO", "MAX_BADGE"), false);
-  assert.equal(hasSubscriptionFeature("PRO", "SERVER_PRIORITY"), false);
-
-  // MAX tier
-  assert.equal(hasSubscriptionFeature("MAX", "PROFILE_VISITORS"), true);
-  assert.equal(hasSubscriptionFeature("MAX", "PLUS_BADGE"), true);
-  assert.equal(hasSubscriptionFeature("MAX", "ADVANCED_STATS"), true);
-  assert.equal(hasSubscriptionFeature("MAX", "PRO_BADGE"), true);
-  assert.equal(hasSubscriptionFeature("MAX", "MAX_BADGE"), true);
-  assert.equal(hasSubscriptionFeature("MAX", "SERVER_PRIORITY"), true);
-  assert.equal(hasSubscriptionFeature("MAX", "PROFILE_HIGHLIGHT"), true);
+  // One platform-wide paid membership
+  assert.equal(hasSubscriptionFeature("MARE", "PROFILE_VISITORS"), true);
+  assert.equal(hasSubscriptionFeature("MARE", "MARE_BADGE"), true);
+  assert.equal(hasSubscriptionFeature("MARE", "ADVANCED_STATS"), true);
+  assert.equal(hasSubscriptionFeature("MARE", "RANKING_FILTERS"), true);
+  assert.equal(hasSubscriptionFeature("MARE", "SERVER_PRIORITY"), true);
+  assert.equal(hasSubscriptionFeature("MARE", "PROFILE_HIGHLIGHT"), true);
+  assert.equal(hasSubscriptionFeature("MARE", "EARLY_ACCESS"), true);
 
   // Null, undefined, and fallback
   assert.equal(hasSubscriptionFeature(null, "PROFILE_VISITORS"), false);

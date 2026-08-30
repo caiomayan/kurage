@@ -1,8 +1,8 @@
 import React from "react";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { PlayerProfileClient } from "@/components/profile/PlayerProfileClient";
-import type { UserWithStats } from "@/types/user";
+import { API_BASE_URL } from "@/lib/constants";
+import { loadPublicPlayer } from "@/lib/public-player-profile";
 
 interface PageProps {
   params: Promise<{
@@ -13,15 +13,13 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { kurageId, slug } = await params;
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-
   try {
-    const res = await fetch(`${apiUrl}/users/${kurageId}`, { next: { revalidate: 60 } });
+    const res = await fetch(`${API_BASE_URL}/users/${kurageId}`, { next: { revalidate: 60 } });
     if (res.ok) {
       const user = await res.json();
       if (user?.username) {
         return {
-          title: `Kurage · ${user.username}`,
+          title: user.username,
           description: `Perfil oficial e telemetria de combate de ${user.username} no ecossistema competitivo Kurage.`,
         };
       }
@@ -32,7 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const fallbackName = slug ? decodeURIComponent(slug) : `Jogador #${kurageId}`;
   return {
-    title: `Kurage · ${fallbackName}`,
+    title: fallbackName,
     description: `Perfil oficial e telemetria de combate no ecossistema competitivo Kurage.`,
   };
 }
@@ -40,29 +38,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function PlayerProfileSlugPage({ params }: PageProps) {
   const { kurageId } = await params;
 
-  if (!kurageId) {
-    notFound();
-  }
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-  let user: UserWithStats | null = null;
-
-  try {
-    const res = await fetch(`${apiUrl}/users/${kurageId}`, {
-      next: { revalidate: 60 },
-    });
-    if (res.ok) {
-      user = await res.json();
-    } else if (res.status === 404) {
-      notFound();
-    }
-  } catch {
-    notFound();
-  }
-
-  if (!user) {
-    notFound();
-  }
-
+  const user = await loadPublicPlayer(kurageId);
   return <PlayerProfileClient user={user} isOwner={false} />;
 }

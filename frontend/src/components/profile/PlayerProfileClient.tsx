@@ -15,7 +15,7 @@ import { EloEvolutionBentoCell } from "./PlayerChartsSection";
 import { PlayerInventoryShowcase } from "./PlayerInventoryShowcase";
 import { PlayerMatchesFeed } from "./PlayerMatchesFeed";
 import { cn } from "@/lib/utils";
-import type { UserWithStats } from "@/types/user";
+import type { PlayerStats, UserWithStats } from "@/types/user";
 
 interface PlayerProfileClientProps {
   user: UserWithStats;
@@ -37,18 +37,21 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
   );
 
   // Seamlessly merge authenticated user data (real Steam avatar, username, stats) when viewing own profile
+  const authenticatedStats: Partial<PlayerStats> | undefined = isOwner
+    ? (authUser as (typeof authUser & { stats?: Partial<PlayerStats> }) | null)?.stats
+    : undefined;
+  const mergedStats = initialUser.stats
+    ? { ...initialUser.stats, ...authenticatedStats }
+    : undefined;
   const user: UserWithStats = {
     ...initialUser,
     ...(isOwner && authUser ? authUser : {}),
-    stats: {
-      ...initialUser.stats,
-      ...(isOwner && (authUser as any)?.stats ? (authUser as any).stats : {}),
-    },
+    stats: mergedStats,
   };
 
   const stats = user.stats;
   const matches = stats?.matchesPlayed ?? 0;
-  const hltvRating = stats?.hltvRating ?? (matches > 0 ? 1.0 : null);
+  const hltvRating = stats?.hltvRating ?? null;
   const kdRatio = stats && stats.deaths > 0 ? Number((stats.kills / stats.deaths).toFixed(2)) : (stats?.kills ?? null);
   const adr = stats && stats.roundsPlayed > 0 ? Number((stats.totalDamage / stats.roundsPlayed).toFixed(1)) : null;
   const hsPercentage = stats && stats.kills > 0 ? Number(((stats.headshots / stats.kills) * 100).toFixed(1)) : null;
@@ -65,7 +68,7 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
         <PlayerProfileHeader
           user={user}
           faceitLevel={user.faceitLevel ?? null}
-          currentRank={user.rankPosition ?? 1}
+          currentRank={user.rankPosition ?? null}
           rankDelta={user.rankDelta ?? 0}
         />
 
@@ -92,7 +95,7 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-[9px] text-[13px] font-sans font-semibold transition-all cursor-pointer",
                 activeTab === "inventory"
-                  ? "bg-[#a9c8c0] text-black shadow-md font-bold"
+                  ? "bg-[var(--kurage-accent)] text-black shadow-md font-bold"
                   : "text-stone-400 hover:text-white"
               )}
             >
@@ -141,7 +144,7 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
 
                 {/* ELO Evolution / Calibration Tide Curve */}
                 <EloEvolutionBentoCell
-                  currentElo={stats?.kurageElo ?? 2000}
+                  currentElo={stats?.kurageElo ?? null}
                   matchesPlayed={matches}
                 />
               </motion.div>

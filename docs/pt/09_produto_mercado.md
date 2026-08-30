@@ -117,34 +117,30 @@ vazio sem indicação.
 
 ## 5. Modelo comercial único
 
-Os planos são mensais e pertencem ao usuário pagante. Um servidor pode ser
-compartilhado com um time, mas o owner financeiro e o consumo permanecem
-inequívocos. O backend entrega entitlements concretos; o frontend nunca decide
-acesso a partir do nome do plano.
+Existe uma única assinatura mensal da plataforma, vinculada ao passaporte do
+usuário. O backend entrega entitlements concretos; o frontend nunca concede
+acesso apenas com base em decoração visual.
 
 | Plano | Preço/mês | Entitlements de lançamento |
 |---|---:|---|
-| FREE | R$ 0 | passaporte, ranking básico, 30 dias de histórico, entrar/criar 1 time, inventário virtual |
-| PLUS | R$ 19 | FREE + 12 meses de histórico, analytics pessoais, visitas e personalização de perfil |
-| PRO | R$ 49 | PLUS + gestão avançada de 1 time, analytics do time, control plane e prioridade de provisionamento |
-| MAX | R$ 129 | PRO + até 3 times gerenciados, auditoria/analytics avançados, export/API com quota e suporte prioritário |
+| Livre | R$ 0 | passaporte, ranking, times, servidores públicos e inventário virtual |
+| Maré | A definir antes do checkout | tema coral global, selo Maré, visitantes do perfil, histórico e análises avançadas, filtros de ranking, prioridade em filas oficiais e acesso antecipado |
 
 Regras comerciais:
 
 - cobrança inicial em BRL via Mercado Pago;
 - free tier permanente substitui trial;
 - sem plano anual no lançamento;
-- servidor não é “ilimitado” nem incluído na mensalidade;
-- créditos: **R$ 49 por 10 horas de servidor**, medidos por minuto, com auto-stop;
+- prioridade nunca expulsa um jogador ativo nem altera regras, dano, economia ou resultado da partida;
+- benefícios valem para toda a plataforma e não ficam presos ao modo Retake;
 - pagamento confirmado por webhook idempotente, nunca pelo redirect do browser;
 - downgrade preserva dados, mas reduz consulta/ação aos limites do novo plano;
 - grace period e cancelamento seguem termos claros e o estado do provedor;
-- `isVerifiedPro` é verificação editorial/manual, separada de PRO/MAX;
+- `isVerifiedPro` é verificação editorial/manual, separada da assinatura Maré;
 - o simulador de inventário é gratuito e não possui valor econômico.
 
-O preço de créditos deve ser revalidado contra câmbio, tributos, fee do pagamento,
-custo do provedor e suporte antes de cada alteração de catálogo. O preço publicado
-é uma hipótese comercial versionada, não permissão para lançar antes do gate.
+Preço, tributos, taxas do gateway e custo de suporte devem ser validados antes da
+ativação do checkout. A existência do catálogo no código não autoriza cobrança.
 
 ## 6. Unit economics e metas
 
@@ -414,4 +410,3 @@ fundador:
 
 Até esse fluxo passar E2E, o posicionamento externo correto é **alfa técnica / beta
 privado**, nunca SaaS em produção.
-

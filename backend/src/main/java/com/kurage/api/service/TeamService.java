@@ -1,6 +1,7 @@
 package com.kurage.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kurage.api.config.TransactionHooks;
 import com.kurage.api.domain.*;
 import com.kurage.api.domain.enums.NotificationType;
 import com.kurage.api.dto.request.TeamRequest;
@@ -9,6 +10,7 @@ import com.kurage.api.dto.response.TeamInvitationResponse;
 import com.kurage.api.dto.response.TeamJoinRequestResponse;
 import com.kurage.api.dto.response.TeamResponse;
 import com.kurage.api.repository.*;
+import com.kurage.api.exception.ExpiredInviteException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -19,12 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Service
@@ -96,7 +98,7 @@ public class TeamService {
     }
 
     @Transactional
-    public TeamResponse updateTeamAvatar(UUID teamId, UUID userId, MultipartFile file) throws IOException {
+    public TeamResponse updateTeamAvatar(UUID teamId, UUID userId, MultipartFile file) {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
 
@@ -107,9 +109,24 @@ public class TeamService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Apenas o dono (OWNER) pode alterar o logo do time.");
         }
 
-        String avatarUrl = s3Service.uploadAvatar(file, team.getId());
-        team.setLogoUrl(avatarUrl);
-        Team savedTeam = teamRepository.save(team);
+        String previousLogoUrl = team.getLogoUrl();
+        String avatarUrl = s3Service.uploadTeamLogo(file, team.getId());
+        AtomicBoolean newImageCleaned = new AtomicBoolean();
+        Runnable cleanNewImage = () -> {
+            if (newImageCleaned.compareAndSet(false, true)) {
+                s3Service.deleteImageIfOwned(avatarUrl);
+            }
+        };
+        TransactionHooks.afterRollback(cleanNewImage);
+        Team savedTeam;
+        try {
+            team.setLogoUrl(avatarUrl);
+            savedTeam = teamRepository.save(team);
+        } catch (RuntimeException exception) {
+            cleanNewImage.run();
+            throw exception;
+        }
+        TransactionHooks.afterCommit(() -> s3Service.deleteImageIfOwned(previousLogoUrl));
         invalidateTeamCache(teamId);
         return TeamResponse.create(savedTeam);
     }
@@ -131,28 +148,33 @@ public class TeamService {
     @Transactional(readOnly = true)
     public TeamResponse getTeamById(UUID id) {
         String cacheKey = "cache:team:" + id;
+        boolean writeTransactionActive = TransactionHooks.isWriteTransactionActive();
 
-        try {
-            String cached = redisTemplate.opsForValue().get(cacheKey);
-            if (cached != null) {
-                return objectMapper.readValue(cached, TeamResponse.class);
+        if (!writeTransactionActive) {
+            try {
+                String cached = redisTemplate.opsForValue().get(cacheKey);
+                if (cached != null) {
+                    return objectMapper.readValue(cached, TeamResponse.class);
+                }
+            } catch (Exception e) {
+                log.warn("Redis unavailable during team cache read: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Redis unavailable during team cache read: {}", e.getMessage());
         }
 
         Team team = teamRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
         TeamResponse response = TeamResponse.create(team);
 
-        try {
-            redisTemplate.opsForValue().set(
-                    cacheKey,
-                    objectMapper.writeValueAsString(response),
-                    Duration.ofMinutes(5)
-            );
-        } catch (Exception e) {
-            log.warn("Redis unavailable during team cache write: {}", e.getMessage());
+        if (!writeTransactionActive) {
+            try {
+                redisTemplate.opsForValue().set(
+                        cacheKey,
+                        objectMapper.writeValueAsString(response),
+                        Duration.ofMinutes(5)
+                );
+            } catch (Exception e) {
+                log.warn("Redis unavailable during team cache write: {}", e.getMessage());
+            }
         }
 
         return response;
@@ -164,7 +186,7 @@ public class TeamService {
 
     @Transactional
     public void sendInvite(UUID teamId, UUID actorId, String userIdentifier, TeamRole targetRole) {
-        Team team = teamRepository.findById(teamId)
+        Team team = teamRepository.findByIdWithLock(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
 
         TeamMember actorMember = teamMemberRepository.findByTeamIdAndUserId(teamId, actorId)
@@ -229,9 +251,9 @@ public class TeamService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ExpiredInviteException.class)
     public TeamResponse acceptInvite(UUID inviteId, UUID userId) {
-        TeamInvitation invite = teamInvitationRepository.findById(inviteId)
+        TeamInvitation invite = teamInvitationRepository.findByIdWithLock(inviteId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Convite não encontrado."));
 
         if (!invite.getInvitedUser().getId().equals(userId)) {
@@ -246,7 +268,7 @@ public class TeamService {
             invite.setStatus(InvitationStatus.EXPIRED);
             invite.setUpdatedAt(Instant.now());
             teamInvitationRepository.save(invite);
-            throw new ResponseStatusException(HttpStatus.GONE, "Este convite expirou (validade de 24 horas).");
+            throw new ExpiredInviteException("Este convite expirou (validade de 24 horas).");
         }
 
         addMemberToTeam(invite.getTeam().getId(), userId, invite.getTargetRole(), ManagementRole.MEMBER);
@@ -260,9 +282,9 @@ public class TeamService {
         return getTeamById(invite.getTeam().getId());
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ExpiredInviteException.class)
     public void declineInvite(UUID inviteId, UUID userId) {
-        TeamInvitation invite = teamInvitationRepository.findById(inviteId)
+        TeamInvitation invite = teamInvitationRepository.findByIdWithLock(inviteId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Convite não encontrado."));
 
         if (!invite.getInvitedUser().getId().equals(userId)) {
@@ -277,7 +299,7 @@ public class TeamService {
             invite.setStatus(InvitationStatus.EXPIRED);
             invite.setUpdatedAt(Instant.now());
             teamInvitationRepository.save(invite);
-            throw new ResponseStatusException(HttpStatus.GONE, "Este convite expirou (validade de 24 horas).");
+            throw new ExpiredInviteException("Este convite expirou (validade de 24 horas).");
         }
 
         invite.setStatus(InvitationStatus.REJECTED);
@@ -293,7 +315,7 @@ public class TeamService {
 
     @Transactional
     public TeamJoinRequestResponse createJoinRequest(UUID teamId, UUID requesterId, TeamRole desiredRole) {
-        Team team = teamRepository.findById(teamId)
+        Team team = teamRepository.findByIdWithLock(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
 
         User requester = userRepository.findById(requesterId)
@@ -359,7 +381,7 @@ public class TeamService {
 
     @Transactional
     public TeamJoinRequestResponse approveJoinRequest(UUID requestId, UUID reviewerId, TeamRole finalRole) {
-        TeamJoinRequest request = teamJoinRequestRepository.findById(requestId)
+        TeamJoinRequest request = teamJoinRequestRepository.findByIdWithLock(requestId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Solicitação não encontrada."));
 
         if (request.getStatus() != JoinRequestStatus.PENDING) {
@@ -398,7 +420,7 @@ public class TeamService {
 
     @Transactional
     public TeamJoinRequestResponse rejectJoinRequest(UUID requestId, UUID reviewerId) {
-        TeamJoinRequest request = teamJoinRequestRepository.findById(requestId)
+        TeamJoinRequest request = teamJoinRequestRepository.findByIdWithLock(requestId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Solicitação não encontrada."));
 
         if (request.getStatus() != JoinRequestStatus.PENDING) {
@@ -435,7 +457,7 @@ public class TeamService {
 
     @Transactional
     public InviteLinkResponse generateInviteLink(UUID teamId, UUID creatorId, TeamRole targetRole, Integer expiresInDays, Integer maxUses) {
-        Team team = teamRepository.findById(teamId)
+        Team team = teamRepository.findByIdWithLock(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
 
         TeamMember creatorMember = teamMemberRepository.findByTeamIdAndUserId(teamId, creatorId)
@@ -486,29 +508,29 @@ public class TeamService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ExpiredInviteException.class)
     public InviteLinkResponse validateInviteLink(String token) {
-        TeamInviteLink link = teamInviteLinkRepository.findByTokenAndIsActiveTrue(token)
+        TeamInviteLink link = teamInviteLinkRepository.findActiveByTokenWithLock(token)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Link de convite inválido ou expirado."));
 
         if (link.getExpiresAt().isBefore(Instant.now()) || link.getCurrentUses() >= link.getMaxUses()) {
             link.setActive(false);
             teamInviteLinkRepository.save(link);
-            throw new ResponseStatusException(HttpStatus.GONE, "Este link de convite expirou ou atingiu o limite de usos.");
+            throw new ExpiredInviteException("Este link de convite expirou ou atingiu o limite de usos.");
         }
 
         return InviteLinkResponse.create(link);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ExpiredInviteException.class)
     public TeamResponse acceptInviteLink(String token, UUID userId) {
-        TeamInviteLink link = teamInviteLinkRepository.findByTokenAndIsActiveTrue(token)
+        TeamInviteLink link = teamInviteLinkRepository.findActiveByTokenWithLock(token)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Link de convite inválido ou inativo."));
 
         if (link.getExpiresAt().isBefore(Instant.now()) || link.getCurrentUses() >= link.getMaxUses()) {
             link.setActive(false);
             teamInviteLinkRepository.save(link);
-            throw new ResponseStatusException(HttpStatus.GONE, "Este link de convite expirou ou atingiu o limite de usos.");
+            throw new ExpiredInviteException("Este link de convite expirou ou atingiu o limite de usos.");
         }
 
         UUID teamId = link.getTeam().getId();
@@ -633,6 +655,8 @@ public class TeamService {
 
     @Transactional
     public TeamResponse promoteToAdmin(UUID teamId, UUID actorId, UUID memberId) {
+        teamRepository.findByIdWithLock(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
         TeamMember actorMember = teamMemberRepository.findByTeamIdAndUserId(teamId, actorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Você não está no time."));
 
@@ -656,6 +680,8 @@ public class TeamService {
 
     @Transactional
     public TeamResponse demoteToMember(UUID teamId, UUID actorId, UUID memberId) {
+        teamRepository.findByIdWithLock(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
         TeamMember actorMember = teamMemberRepository.findByTeamIdAndUserId(teamId, actorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Você não está no time."));
 
@@ -679,6 +705,8 @@ public class TeamService {
 
     @Transactional
     public TeamResponse transferOwnership(UUID teamId, UUID currentOwnerId, UUID newOwnerId) {
+        Team team = teamRepository.findByIdWithLock(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
         TeamMember currentOwnerMember = teamMemberRepository.findByTeamIdAndUserId(teamId, currentOwnerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Você não está no time."));
 
@@ -696,8 +724,6 @@ public class TeamService {
         currentOwnerMember.setManagementRole(ManagementRole.ADMIN);
         newOwnerMember.setManagementRole(ManagementRole.OWNER);
 
-        Team team = teamRepository.findById(teamId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
         team.setOwner(newOwnerMember.getUser());
         teamRepository.save(team);
 
@@ -709,6 +735,8 @@ public class TeamService {
 
     @Transactional
     public TeamResponse removeMember(UUID teamId, UUID actorId, UUID memberId) {
+        teamRepository.findByIdWithLock(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time não encontrado."));
         TeamMember actorMember = teamMemberRepository.findByTeamIdAndUserId(teamId, actorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Você não está no time."));
 
@@ -875,22 +903,26 @@ public class TeamService {
 
     private void invalidateTeamCache(UUID teamId) {
         if (teamId != null) {
-            try {
-                redisTemplate.delete("cache:team:" + teamId);
-            } catch (Exception e) {
-                log.warn("Redis unavailable during team cache invalidation: {}", e.getMessage());
-            }
+            TransactionHooks.afterCommit(() -> {
+                try {
+                    redisTemplate.delete("cache:team:" + teamId);
+                } catch (Exception e) {
+                    log.warn("Redis unavailable during team cache invalidation: {}", e.getMessage());
+                }
+            });
         }
     }
 
     private void invalidateUserTeamCaches(String steamId64) {
         if (steamId64 != null) {
-            try {
-                redisTemplate.delete("cache:userteams:" + steamId64);
-                redisTemplate.delete("cache:userinvites:" + steamId64);
-            } catch (Exception e) {
-                log.warn("Redis unavailable during user cache invalidation: {}", e.getMessage());
-            }
+            TransactionHooks.afterCommit(() -> {
+                try {
+                    redisTemplate.delete("cache:userteams:" + steamId64);
+                    redisTemplate.delete("cache:userinvites:" + steamId64);
+                } catch (Exception e) {
+                    log.warn("Redis unavailable during user cache invalidation: {}", e.getMessage());
+                }
+            });
         }
     }
 }

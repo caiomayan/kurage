@@ -1,228 +1,144 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import {
-  PiSparkle,
-  PiPlus,
-  PiLockKeyOpen,
-  PiSpinnerGap,
-  PiDownloadSimple,
-} from "react-icons/pi";
-import { CS2EconomyItem, CS2BaseInventoryItem } from "@ianlucas/cs2-lib";
-import { InventoryProvider, useKurageInventory } from "@/lib/inventory/inventory-context";
-import { TransformedInventoryItem, sortInventoryItems } from "@/lib/inventory/inventory-transform";
-import { InventoryHeader, InventoryCategory, InventoryViewMode } from "@/components/inventory/InventoryHeader";
+import { useEffect, useMemo, useState } from "react";
+import { PiArrowClockwise, PiPlus, PiSparkle } from "react-icons/pi";
+import { CS2BaseInventoryItem, CS2EconomyItem } from "@ianlucas/cs2-lib";
+import { useAuth } from "@/lib/auth";
+import { useKurageInventory } from "@/lib/inventory/inventory-context";
+import { sortInventoryItems, TransformedInventoryItem } from "@/lib/inventory/inventory-transform";
+import { InventoryHeader, InventorySort } from "@/components/inventory/InventoryHeader";
 import { InventoryItemCard } from "@/components/inventory/InventoryItemCard";
-import { LoadoutViewer } from "@/components/inventory/LoadoutViewer";
+import { InventoryOceanicBackground } from "@/components/inventory/InventoryOceanicBackground";
+import { MusicKitSlot } from "@/components/inventory/MusicKitSlot";
 import { CraftModal } from "@/components/inventory/CraftModal";
 import { Inspect3DModal } from "@/components/inventory/Inspect3DModal";
-import { CaseOpeningModal } from "@/components/inventory/CaseOpeningModal";
 import { ImportInspectModal } from "@/components/inventory/ImportInspectModal";
 
 export default function InventoryPage() {
-  const { items, isLoading, itemCount } = useKurageInventory();
-
-  // View mode (Grid vs Loadout)
-  const [viewMode, setViewMode] = useState<InventoryViewMode>("grid");
-
-  // Filters & Sorting state
+  const { isAuthenticated, isLoading: isAuthLoading, loginWithSteam } = useAuth();
+  const { items, isLoading: isInventoryLoading, itemCount, loadError, syncNow } = useKurageInventory();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<InventoryCategory>("all");
-  const [sortBy, setSortBy] = useState<"equipped" | "newest" | "rarity" | "name" | "type">("equipped");
-
-  // Modals state
+  const [sortBy, setSortBy] = useState<InventorySort>("equipped");
   const [isCraftOpen, setIsCraftOpen] = useState(false);
-  const [isCaseOpen, setIsCaseOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [inspectingItem, setInspectingItem] = useState<TransformedInventoryItem | null>(null);
   const [editingItem, setEditingItem] = useState<TransformedInventoryItem | null>(null);
   const [preselectedEconomyItem, setPreselectedEconomyItem] = useState<CS2EconomyItem | null>(null);
   const [preselectedAttributes, setPreselectedAttributes] = useState<Partial<CS2BaseInventoryItem> | null>(null);
 
-  // Filtered & Sorted items
-  const filteredItems = useMemo(() => {
-    let result = items;
-
-    // Search filter
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (it) =>
-          it.item.name.toLowerCase().includes(q) ||
-          (it.item.nameTag && it.item.nameTag.toLowerCase().includes(q))
-      );
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      loginWithSteam("/inventory");
     }
+  }, [isAuthLoading, isAuthenticated, loginWithSteam]);
 
-    // Category filter using cs2-lib type predicates
-    if (category !== "all") {
-      result = result.filter((it) => {
-        const item = it.item;
-        if (category === "pistol") return item.isPistol();
-        if (category === "rifle") return item.isRifle();
-        if (category === "smg") return item.isSMG();
-        if (category === "heavy") return item.isHeavy();
-        if (category === "knife") return item.isMelee();
-        if (category === "glove") return item.isGloves();
-        if (category === "sticker") return item.isSticker();
-        if (category === "keychain") return item.isKeychain();
-        if (category === "agent") return item.isAgent();
-        if (category === "musickit") return item.isMusicKit();
-        if (category === "case") return item.isContainer();
-        return true;
-      });
-    }
+  const visibleItems = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase("pt-BR");
+    const filtered = query
+      ? items.filter((entry) =>
+          [entry.item.name, entry.item.nameTag]
+            .filter(Boolean)
+            .some((value) => value!.toLocaleLowerCase("pt-BR").includes(query)),
+        )
+      : items;
+    return sortInventoryItems(filtered, sortBy);
+  }, [items, search, sortBy]);
 
-    return sortInventoryItems(result, sortBy);
-  }, [items, search, category, sortBy]);
+  const openCreate = () => {
+    setEditingItem(null);
+    setPreselectedEconomyItem(null);
+    setPreselectedAttributes(null);
+    setIsCraftOpen(true);
+  };
 
-  if (isLoading) {
+  const openEdit = (item: TransformedInventoryItem) => {
+    setEditingItem(item);
+    setPreselectedEconomyItem(null);
+    setPreselectedAttributes(null);
+    setIsCraftOpen(true);
+  };
+
+  if (isAuthLoading || !isAuthenticated || isInventoryLoading) {
     return (
-      <div className="min-h-screen bg-[#020507] flex items-center justify-center text-ink">
-        <PiSpinnerGap className="w-8 h-8 animate-spin text-[#a9c8c0]" />
+      <div className="relative grid min-h-screen place-items-center overflow-hidden bg-black text-white">
+        <InventoryOceanicBackground />
+        <div className="relative z-10 flex flex-col items-center gap-4 text-center">
+          <PiArrowClockwise className="h-7 w-7 animate-spin text-[var(--kurage-accent)]" />
+          <p className="text-sm text-white/45">
+            {!isAuthLoading && !isAuthenticated ? "Conectando sua identidade Steam…" : "Recuperando seu acervo…"}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-screen bg-[#020507] font-sans text-ink pb-36 pt-24 sm:pt-32">
-      {/* ── SUBTLE OCEANIC ATMOSPHERE ── */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div
-          className="absolute -top-[15%] left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full opacity-[0.05] blur-[160px]"
-          style={{ background: "radial-gradient(circle, #a9c8c0 0%, #92bce3 50%, transparent 70%)" }}
-        />
-      </div>
+    <div className="relative min-h-screen overflow-hidden bg-black pb-32 pt-24 text-white sm:pt-32">
+      <InventoryOceanicBackground />
 
-      {/* ── MAIN CONTAINER ── */}
-      <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Header Toolbar */}
+      <div className="relative z-10 mx-auto w-full max-w-[1500px] px-4 sm:px-6 lg:px-8">
         <InventoryHeader
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
           search={search}
           onSearchChange={setSearch}
-          category={category}
-          onCategoryChange={setCategory}
           sortBy={sortBy}
           onSortChange={setSortBy}
-          onOpenCraft={() => {
-            setEditingItem(null);
-            setPreselectedEconomyItem(null);
-            setPreselectedAttributes(null);
-            setIsCraftOpen(true);
-          }}
-          onOpenCase={() => setIsCaseOpen(true)}
+          onOpenCraft={openCreate}
           onOpenImport={() => setIsImportOpen(true)}
         />
 
-        {/* ── MAIN CONTENT: GRID vs LOADOUT ── */}
-        <div className="mt-8">
-          {viewMode === "loadout" ? (
-            /* Loadout Active View */
-            <LoadoutViewer
-              onInspect={(it) => setInspectingItem(it)}
-              onEdit={(it) => {
-                setEditingItem(it);
-                setPreselectedEconomyItem(null);
-                setPreselectedAttributes(null);
-                setIsCraftOpen(true);
-              }}
-              onOpenCraft={(_category) => {
-                setEditingItem(null);
-                setPreselectedEconomyItem(null);
-                setPreselectedAttributes(null);
-                setIsCraftOpen(true);
-              }}
-            />
-          ) : filteredItems.length > 0 ? (
-            /* Grid View */
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 animate-in fade-in">
-              {filteredItems.map((itemData) => (
-                <InventoryItemCard
-                  key={itemData.uid}
-                  itemData={itemData}
-                  onInspect={(it) => setInspectingItem(it)}
-                  onEdit={(it) => {
-                    setEditingItem(it);
-                    setPreselectedEconomyItem(null);
-                    setPreselectedAttributes(null);
-                    setIsCraftOpen(true);
-                  }}
-                  onApplySticker={(it) => {
-                    setEditingItem(it);
-                    setPreselectedEconomyItem(null);
-                    setPreselectedAttributes(null);
-                    setIsCraftOpen(true);
-                  }}
-                  onApplyKeychain={(it) => {
-                    setEditingItem(it);
-                    setPreselectedEconomyItem(null);
-                    setPreselectedAttributes(null);
-                    setIsCraftOpen(true);
-                  }}
-                />
-              ))}
+        <MusicKitSlot />
+
+        {loadError ? (
+          <section className="mt-8 rounded-[14px] border border-red-300/15 bg-red-300/[0.035] p-8 text-center backdrop-blur-xl">
+            <h2 className="font-display text-2xl text-white">O acervo não respondeu</h2>
+            <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-white/45">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => void syncNow()}
+              className="mt-5 inline-flex h-10 items-center gap-2 rounded-[8px] bg-white px-4 text-sm font-semibold text-black"
+            >
+              <PiArrowClockwise className="h-4 w-4" />
+              Tentar novamente
+            </button>
+          </section>
+        ) : visibleItems.length > 0 ? (
+          <section className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3" aria-label="Itens do seu inventário">
+            {visibleItems.map((item) => (
+              <InventoryItemCard
+                key={item.uid}
+                itemData={item}
+                onInspect={setInspectingItem}
+                onEdit={openEdit}
+              />
+            ))}
+          </section>
+        ) : (
+          <section className="mt-8 flex min-h-[360px] flex-col items-center justify-center rounded-[16px] border border-white/[0.07] bg-black/45 px-6 text-center backdrop-blur-xl">
+            <div className="grid h-12 w-12 place-items-center rounded-full border border-[var(--kurage-accent)]/20 bg-[var(--kurage-accent)]/[0.07] text-[var(--kurage-accent)]">
+              <PiSparkle className="h-5 w-5" />
             </div>
-          ) : (
-            /* Empty State */
-            <div className="py-24 rounded-[16px] bg-white/[0.015] border border-white/[0.06] flex flex-col items-center justify-center text-center p-6 gap-4 animate-in fade-in">
-              <div className="w-12 h-12 rounded-full bg-[#a9c8c0]/10 border border-[#a9c8c0]/20 flex items-center justify-center text-[#a9c8c0]">
-                <PiSparkle className="w-6 h-6" />
-              </div>
-
-              <div className="flex flex-col gap-1 max-w-md">
-                <h3 className="font-display text-[20px] font-bold text-white tracking-tight">
-                  {itemCount === 0 ? "Seu inventário está vazio" : "Nenhum item encontrado"}
-                </h3>
-                <p className="text-[13px] font-sans text-stone-400 leading-relaxed">
-                  {itemCount === 0
-                    ? "Crie sua primeira skin personalizada no Estúdio de Crafting, importe um link de inspeção ou abra caixas gratuitamente."
-                    : "Tente ajustar seus filtros de categoria ou termo de busca acima."}
-                </p>
-              </div>
-
-              {itemCount === 0 && (
-                <div className="flex items-center gap-3 mt-2 flex-wrap justify-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingItem(null);
-                      setPreselectedEconomyItem(null);
-                      setPreselectedAttributes(null);
-                      setIsCraftOpen(true);
-                    }}
-                    className="h-10 px-5 rounded-[8px] bg-white text-black font-sans font-semibold text-[13px] hover:bg-stone-200 transition-colors cursor-pointer flex items-center gap-2 shadow-md"
-                  >
-                    <PiPlus className="w-4 h-4" />
-                    <span>Criar Primeira Skin</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsImportOpen(true)}
-                    className="h-10 px-4 rounded-[8px] bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.1] text-white font-sans font-medium text-[13px] transition-colors cursor-pointer flex items-center gap-2"
-                  >
-                    <PiDownloadSimple className="w-4 h-4 text-[#a9c8c0]" />
-                    <span>Importar !i / Link</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsCaseOpen(true)}
-                    className="h-10 px-4 rounded-[8px] bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.1] text-white font-sans font-medium text-[13px] transition-colors cursor-pointer flex items-center gap-2"
-                  >
-                    <PiLockKeyOpen className="w-4 h-4 text-[#e5c158]" />
-                    <span>Abrir Caixa</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            <h2 className="mt-5 font-display text-3xl font-normal text-white">
+              {itemCount === 0 ? "Seu primeiro item começa aqui." : "Nada emergiu nessa busca."}
+            </h2>
+            <p className="mt-2 max-w-md text-sm leading-6 text-white/42">
+              {itemCount === 0
+                ? "Escolha uma skin, faca, luva ou agente e personalize cada detalhe antes de adicionar ao acervo."
+                : "Ajuste o termo pesquisado para reencontrar um item da sua coleção."}
+            </p>
+            {itemCount === 0 && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="mt-6 inline-flex h-11 items-center gap-2 rounded-[8px] bg-white px-5 text-sm font-semibold text-black hover:bg-[#f1f7fe]"
+              >
+                <PiPlus className="h-4 w-4" />
+                Adicionar primeiro item
+              </button>
+            )}
+          </section>
+        )}
       </div>
 
-      {/* ── MODALS ── */}
-      {/* 1. Crafting Studio Modal */}
       <CraftModal
         isOpen={isCraftOpen}
         onClose={() => {
@@ -236,32 +152,23 @@ export default function InventoryPage() {
         initialAttributes={preselectedAttributes}
       />
 
-      {/* 2. Inspect 3D Modal */}
       <Inspect3DModal
         itemData={inspectingItem}
         onClose={() => setInspectingItem(null)}
-        onEdit={(it) => {
+        onEdit={(item) => {
           setInspectingItem(null);
-          setEditingItem(it);
-          setIsCraftOpen(true);
+          openEdit(item);
         }}
       />
 
-      {/* 3. Case Opening Modal */}
-      <CaseOpeningModal
-        isOpen={isCaseOpen}
-        onClose={() => setIsCaseOpen(false)}
-      />
-
-      {/* 4. Import Inspect Link Modal */}
       <ImportInspectModal
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
-        onOpenCraftWithItem={(econItem, attrs) => {
+        onOpenCraftWithItem={(item, attributes) => {
           setIsImportOpen(false);
           setEditingItem(null);
-          setPreselectedEconomyItem(econItem);
-          setPreselectedAttributes(attrs);
+          setPreselectedEconomyItem(item);
+          setPreselectedAttributes(attributes);
           setIsCraftOpen(true);
         }}
       />

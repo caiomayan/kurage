@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
+import { APP_DOMAIN } from "@/lib/constants";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://kurage.caiomayan.com";
+  const baseUrl = APP_DOMAIN;
   const now = new Date();
 
   return [
@@ -18,28 +19,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/ranking/teams`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.8,
-    },
-    {
       url: `${baseUrl}/mar`,
       lastModified: now,
       changeFrequency: "always",
       priority: 0.8,
-    },
-    {
-      url: `${baseUrl}/teams`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.7,
-    },
-    {
-      url: `${baseUrl}/search`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.6,
     },
   ];
 }

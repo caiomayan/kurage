@@ -4,8 +4,6 @@ import com.kurage.api.domain.SubscriptionTier;
 import com.kurage.api.domain.User;
 import org.springframework.stereotype.Service;
 
-import java.time.OffsetDateTime;
-
 @Service
 public class SubscriptionService {
 
@@ -14,17 +12,7 @@ public class SubscriptionService {
             return SubscriptionTier.FREE;
         }
 
-        SubscriptionTier tier = user.getSubscriptionTier();
-        if (tier == null) {
-            return SubscriptionTier.FREE;
-        }
-
-        // Se possuir data de expiração e ela já tiver passado, retorna FREE
-        if (user.getSubscriptionExpiresAt() != null && user.getSubscriptionExpiresAt().isBefore(OffsetDateTime.now())) {
-            return SubscriptionTier.FREE;
-        }
-
-        return tier;
+        return user.getEffectiveSubscriptionTier();
     }
 
     public boolean isVip(User user) {

@@ -19,7 +19,7 @@ export interface SnapshotPlayerRow {
 }
 
 interface PlayerRankingSnapshotProps {
-  currentRank?: number;
+  currentRank: number;
   player: {
     kurageId: string | number;
     username: string;
@@ -57,7 +57,7 @@ function PositionDelta({ delta }: { delta?: number | null }) {
  * Hover state: Expands smoothly into the vertical live snapshot ladder.
  */
 export function PlayerRankingSnapshot({
-  currentRank = 1,
+  currentRank,
   player,
   previousPlayer = null,
   nextPlayer = null,
@@ -76,7 +76,7 @@ export function PlayerRankingSnapshot({
         className={cn(
           "flex items-center gap-1.5 py-1 px-1.5 rounded-md transition-all duration-300 cursor-pointer",
           isHovered
-            ? "opacity-100 text-[#a9c8c0]"
+            ? "opacity-100 text-[var(--kurage-accent)]"
             : "opacity-30 hover:opacity-80 text-mute hover:text-ink"
         )}
         title={`Classificação: #${currentRank}`}
@@ -110,6 +110,7 @@ export function PlayerRankingSnapshot({
                 <Avatar
                   src={previousPlayer.avatarUrl}
                   username={previousPlayer.username}
+                  kurageId={previousPlayer.kurageId}
                   size="xs"
                   isVerifiedPro={previousPlayer.isVerifiedPro}
                   className="w-3.5 h-3.5"
@@ -123,7 +124,7 @@ export function PlayerRankingSnapshot({
 
             {/* CURRENT PLAYER (#N - VOCÊ COM MICRO-AVATAR E NOME 'Você') */}
             <div className="flex items-center gap-2 py-0.5 px-1.5 rounded-md bg-white/[0.04]">
-              <div className="flex items-center gap-0.5 w-6 text-[#a9c8c0]">
+              <div className="flex items-center gap-0.5 w-6 text-[var(--kurage-accent)]">
                 <span className="font-mono text-[12px] font-bold">#{currentRank}</span>
                 <PositionDelta delta={rankDelta} />
               </div>
@@ -131,6 +132,7 @@ export function PlayerRankingSnapshot({
               <Avatar
                 src={player.avatarUrl}
                 username={player.username}
+                kurageId={player.kurageId}
                 size="xs"
                 isVerifiedPro={player.isVerifiedPro}
                 className="w-3.5 h-3.5"
@@ -156,6 +158,7 @@ export function PlayerRankingSnapshot({
                 <Avatar
                   src={nextPlayer.avatarUrl}
                   username={nextPlayer.username}
+                  kurageId={nextPlayer.kurageId}
                   size="xs"
                   isVerifiedPro={nextPlayer.isVerifiedPro}
                   className="w-3.5 h-3.5"

@@ -20,6 +20,9 @@ public class EquippedStickerDto {
     @JsonProperty("def")
     private Integer def;
 
+    @JsonProperty("schema")
+    private Integer schema;
+
     @JsonProperty("wear")
     private Float wear;
 

@@ -1,0 +1,63 @@
+#cloud-config
+hostname: kurage-backend
+manage_etc_hosts: true
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - docker.io
+  - docker-compose-v2
+  - fail2ban
+  - unattended-upgrades
+  - ufw
+
+users:
+  - default
+  - name: kurage
+    gecos: Kurage deployment user
+    groups: [adm]
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: "0644"
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "5"
+        },
+        "live-restore": true
+      }
+  - path: /etc/ssh/sshd_config.d/99-kurage-hardening.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      PubkeyAuthentication yes
+  - path: /etc/fail2ban/jail.d/sshd.local
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      maxretry = 5
+      bantime = 1h
+
+runcmd:
+  - [bash, -lc, "install -d -m 0750 -o kurage -g kurage /opt/kurage/backend /opt/kurage/backend/incoming /opt/kurage/backups"]
+  - [bash, -lc, "usermod -aG docker kurage"]
+  - [bash, -lc, "systemctl enable --now docker fail2ban unattended-upgrades"]
+  - [bash, -lc, "ufw default deny incoming && ufw default allow outgoing && ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable"]
+  - [bash, -lc, "if [ ! -f /swapfile ]; then fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab; fi"]
+  - [bash, -lc, "systemctl restart ssh docker"]
+
+final_message: "Kurage backend host bootstrap completed after $UPTIME seconds."

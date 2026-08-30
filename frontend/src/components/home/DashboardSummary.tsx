@@ -6,16 +6,11 @@ import { useAuth } from "@/lib/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
 import { FaceitLevelIcon } from "@/components/ui/faceit-levels/FaceitLevelIcon";
-import { RoleIcon } from "@/components/ui/RoleIcon";
 import { 
   PiCrosshair, 
   PiTrophy, 
-  PiClockCounterClockwise, 
   PiWarningCircle,
-  PiArrowUpRight,
-  PiArrowDownRight,
   PiTarget,
-  PiChartLineUp,
   PiCalendarBlank
 } from "react-icons/pi";
 import { SiFaceit } from "react-icons/si";
@@ -50,7 +45,6 @@ export function DashboardSummary() {
 
   const playerStats = rankingData?.player;
   const history = rankingData?.history || [];
-  const currentPosition = rankingData?.currentPosition;
   const deltaYesterday = rankingData?.deltaYesterday || 0;
   
   // Condicional de dados do Kurage
@@ -65,8 +59,6 @@ export function DashboardSummary() {
   ) : (
     <FaceitLevelIcon level={faceitData?.level || 1} className="w-5 h-5" />
   );
-  const displayMatches = hasKurageData ? playerStats?.matches : 0;
-  const displayWins = hasKurageData ? playerStats?.wins : 0;
   const displayWinRateDonutSource = hasKurageData 
     ? { wins: playerStats?.wins || 0, matches: playerStats?.matches || 0 } 
     : { wins: faceitData?.winRate ? Math.round((faceitData.winRate / 100) * 100) : 0, matches: faceitData?.winRate ? 100 : 0 };
@@ -111,6 +103,7 @@ export function DashboardSummary() {
               <Avatar
                 src={user.avatarUrl}
                 username={user.username}
+                kurageId={user.kurageId}
                 size="xl"
                 isVerifiedPro={user.isVerifiedPro}
                 className="shrink-0"
@@ -365,7 +358,7 @@ export function DashboardSummary() {
                       <span className={`text-[12px] font-sans font-semibold w-6 text-center ${player.kurageId === user.kurageId ? "text-accent" : "text-mute"}`}>
                         #{player.position}
                       </span>
-                      <Avatar src={player.avatarUrl} username={player.username} size="sm" />
+                      <Avatar src={player.avatarUrl} username={player.username} kurageId={player.kurageId} size="sm" />
                       <div className="flex flex-col flex-1 min-w-0">
                         <span className="text-[13px] text-ink truncate font-semibold">
                           {player.username} {player.kurageId === user.kurageId && <span className="text-[10px] text-mute font-normal">(Você)</span>}

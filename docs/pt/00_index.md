@@ -29,6 +29,14 @@ um frontend Next.js e por plugins CounterStrikeSharp.
 flowchart TD
     A[00 — Índice] --> B[08 — Auditoria factual]
     A --> C[09 — Produto e mercado]
+    A --> K[10 — Notificações PostgreSQL]
+    A --> L[11 — Testes de integração]
+    A --> M[12 — Plano Maré]
+    A --> N[13 — Autenticação e segurança]
+    A --> O[14 — Consistência e observabilidade]
+    A --> P[15 — Operação e release]
+    A --> Q[16 — Prontidão jurídica]
+    A --> R[17 — Deploy OCI e Vercel]
     A --> D[01 — Arquitetura atual/intenção]
     A --> E[02 — Backend]
     A --> F[03 — Frontend]
@@ -49,6 +57,14 @@ flowchart TD
 7. [Design system](./07_frontend_design_system.md)
 8. [Auditoria completa do estado atual](./08_auditoria_estado_atual.md)
 9. [Produto, mercado, monetização e portfólio](./09_produto_mercado.md)
+10. [Notificações no PostgreSQL](./10_notificacoes_postgres.md)
+11. [Estratégia de testes com serviços reais](./11_testes_integracao.md)
+12. [Plano Maré](./12_plano_mare.md)
+13. [Autenticação, sessão e fronteira de confiança](./13_autenticacao_seguranca.md)
+14. [Consistência transacional e observabilidade](./14_consistencia_observabilidade.md)
+15. [Operação, recuperação e gate de release](./15_operacao_e_release.md)
+16. [Prontidão jurídica e de privacidade](./16_prontidao_juridica.md)
+17. [Deploy da alfa na OCI e Vercel](./17_deploy_alpha_oci_vercel.md)
 
 ## Documentos do repositório
 
@@ -59,7 +75,6 @@ flowchart TD
 - [Política de segurança](../../SECURITY.md)
 - [Política de contribuição](../../CONTRIBUTING.md)
 
-Os antigos domínios `kurage.caiomayan.com` e
-`apikurage.caiomayan.com` são referências de configuração, não evidência de
-produção operacional.
-
+Os domínios `kurage.caiomayan.com` e `api.caiomayan.com` são o contrato preparado
+para a alfa, mas só constituem produção operacional depois do primeiro deploy e
+dos gates descritos no documento 17.

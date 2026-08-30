@@ -1,0 +1,12 @@
+{
+  "Enabled": true,
+  "BuyWindowSeconds": 5,
+  "RoundLoadoutDelaySeconds": 0.35,
+  "PersistPistolPreference": true,
+  "EnforceNativeBuyRules": true,
+  "DamageWeight": 1,
+  "KillWeight": 50,
+  "AssistWeight": 25,
+  "ObjectiveWeight": 50,
+  "FriendlyDamagePenalty": 1
+}

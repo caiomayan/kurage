@@ -5,9 +5,31 @@
 
 export const APP_NAME = "Kurage";
 export const APP_TAGLINE = "O competitivo em um só lugar";
-export const APP_DOMAIN = "https://kurage.caiomayan.com";
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
+function publicUrl(name: string, configuredValue: string | undefined, localFallback: string) {
+  const value = configuredValue?.trim() || localFallback;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("unsupported protocol");
+    }
+    return url.origin;
+  } catch {
+    throw new Error(`${name} must be a valid absolute HTTP(S) URL`);
+  }
+}
+
+export const APP_DOMAIN = publicUrl(
+  "NEXT_PUBLIC_APP_URL",
+  process.env.NEXT_PUBLIC_APP_URL,
+  "http://localhost:3000",
+);
+export const API_BASE_URL = publicUrl(
+  "NEXT_PUBLIC_API_URL",
+  process.env.NEXT_PUBLIC_API_URL,
+  "http://localhost:8080",
+);
+export const CS2_CONNECT_HOST = process.env.NEXT_PUBLIC_CS2_CONNECT_HOST?.trim() || "";
 
 export const REDIRECT_STORAGE_KEY = "kurage_auth_redirect_to";
 

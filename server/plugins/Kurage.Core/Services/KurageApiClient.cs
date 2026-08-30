@@ -39,7 +39,10 @@ public class KurageApiClient
         string mapName, 
         int currentPlayers, 
         int maxPlayers, 
-        string? gameMode = null,
+        int ctScore,
+        int trScore,
+        string gameMode,
+        string serverKind,
         List<ServerPlayerPayload>? players = null
     )
     {
@@ -50,7 +53,10 @@ public class KurageApiClient
                 CurrentMap = mapName,
                 CurrentPlayers = currentPlayers,
                 MaxPlayers = maxPlayers,
+                CtScore = ctScore,
+                TrScore = trScore,
                 GameMode = gameMode,
+                ServerKind = serverKind,
                 Players = players
             };
 

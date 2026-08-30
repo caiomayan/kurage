@@ -12,38 +12,40 @@ transformar o resultado em um passaporte competitivo público e auditável.
 
 ## Estado do projeto
 
-**Alfa técnica — não pronto para produção ou cobrança.** Em 20 de agosto de 2026,
-o código compila e a suíte Java passa, mas ainda faltam o motor de partidas/ELO,
-cobrança recorrente, provisionamento real de servidores, aplicação de loadout no
-jogo e os controles de segurança P0. Os domínios antes documentados como produção
-não estavam publicamente operacionais durante a auditoria.
+**Candidato a alfa técnica fechada — não pronto para produção pública ou
+cobrança.** Em 29 de agosto de 2026, os gates automatizados passam e a base de
+segurança foi endurecida. Antes de convidar usuários reais ainda é obrigatório
+configurar a infraestrutura externa, executar um restore, preencher/revisar as
+minutas jurídicas e concluir o smoke visual e uma partida Retake real. Motor de
+partidas/ELO, DM, 5v5 dinâmico e pagamento permanecem fora deste release.
 
 | Capacidade | Estado verificável |
 |---|---|
-| Steam OpenID, JWT curto e refresh rotativo | Implementado; falta proteção anti-replay/state |
+| Steam OpenID, JWT curto e refresh rotativo | Implementado com state one-time, anti-replay e rotação Redis atômica |
 | Perfil, configurações e vínculo FACEIT | Implementado |
 | Rankings de jogadores e times | Consulta/UI implementadas; ELO não recebe resultados de partidas |
 | Times, convites, links e papéis | API implementada; experiência web incompleta |
 | Inventário virtual e loadout | Persistência/UI implementadas; plugin não aplica skins no CS2 |
-| Browser e heartbeat de servidor | Protótipo funcional; sem provisionamento, tenancy ou credencial individual |
-| Notificações | API em MongoDB; sem experiência completa no frontend |
-| Assinaturas FREE/PLUS/PRO/MAX | Modelo visual e flags; sem checkout, webhook ou entitlement comercial |
-| Produção, observabilidade e disaster recovery | Não implementados |
+| Browser e heartbeat de servidor | Funcional com credencial hash individual; sem provisionamento dinâmico ou tenancy |
+| Notificações | PostgreSQL com conteúdo e entrega por destinatário; sem experiência completa no frontend |
+| Assinatura Maré | Plano único, entitlements e identidade coral implementados; sem checkout ou webhook |
+| Produção, observabilidade e disaster recovery | Métricas e runbook implementados; alertas externos e primeiro ensaio de restore pendentes |
 
 A revisão completa, incluindo evidências por arquivo, riscos e priorização, está em
 [Auditoria do estado atual](./docs/pt/08_auditoria_estado_atual.md). A proposta
-comercial única está em [Produto, mercado e execução](./docs/pt/09_produto_mercado.md).
+comercial está em [Produto, mercado e execução](./docs/pt/09_produto_mercado.md)
+e o contrato do plano em [Plano Maré](./docs/pt/12_plano_mare.md).
 
 ## Arquitetura atual
 
 ```mermaid
 flowchart LR
-    U[Jogador / navegador] --> FE[Next.js 16 + React 19]
+    U[Jogador / navegador] -->|kurage.caiomayan.com| FE[Next.js 16 + React 19<br/>Vercel]
+    U -->|api.caiomayan.com via Cloudflare| API
     FE -->|REST + Bearer JWT| API[Spring Boot 4 / Java 21]
     GS[Servidor CS2<br/>plugins .NET 10] -->|heartbeat e consultas REST| API
     API --> PG[(PostgreSQL 16<br/>dados transacionais)]
     API --> RD[(Redis 7<br/>sessões, limites e estado live)]
-    API --> MG[(MongoDB 6<br/>notificações)]
     API --> R2[Cloudflare R2<br/>avatars/logos]
     API --> ST[Steam OpenID / Web API]
     API --> FA[FACEIT Data API]
@@ -51,7 +53,7 @@ flowchart LR
 
 O backend é um **monólito modular**, não um conjunto de microserviços. Essa é a
 arquitetura correta para o estágio atual. A evolução definida mantém um único
-deploy da API, consolida notificações no PostgreSQL, usa outbox para eventos e
+deploy da API, mantém notificações no PostgreSQL, usa outbox para eventos e
 separa módulos de identidade, times, competitivo, control plane, billing e
 entitlements. Servidores serão provisionados primeiro por API da DatHost; cobrança
 será feita com Mercado Pago em BRL.
@@ -60,9 +62,10 @@ será feita com Mercado Pago em BRL.
 
 - Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS 4 e TanStack Query.
 - Backend: Java 21, Spring Boot 4.1, Spring Security, JPA, Flyway e Maven.
-- Dados: PostgreSQL, Redis e MongoDB no estado atual; Cloudflare R2 para mídia.
+- Dados: PostgreSQL e Redis; Cloudflare R2 para mídia.
 - Jogo: plugins C#/.NET 10 com CounterStrikeSharp.
-- Infra local: Docker Compose; Caddy previsto como reverse proxy.
+- Infra local: Docker Compose; Caddy configurado como reverse proxy e fronteira de confiança.
+- Infra da alfa: frontend na Vercel e backend em OCI Ampere A1 via Terraform e GitHub Actions.
 
 ## Estrutura
 
@@ -73,6 +76,7 @@ kurage/
 ├── server/plugins/   integrações CounterStrikeSharp
 ├── docs/pt/          documentação em português
 ├── docs/en/          documentação em inglês
+├── infra/            Terraform OCI, bootstrap e release portável
 └── assets/           material de design sujeito a auditoria de direitos
 ```
 
@@ -106,17 +110,18 @@ CounterStrikeSharp.
 
 ## Qualidade validada
 
-- Backend: **137 testes em 22 suítes, sem falhas, erros ou testes ignorados**.
+- Backend: 172 testes unitários e 23 integrações reais validados em conjunto com
+  PostgreSQL 16, Redis 7 autenticado, Testcontainers e Flyway V1–V10.
 - Empacotamento Java: concluído; JAR gerado.
 - Docker Compose de desenvolvimento e produção: configuração sintaticamente válida.
-- Plugins C#: revisão estática concluída; build não executado porque o ambiente não
-  possui SDK .NET.
-- Frontend: consulte a seção de validação da auditoria para o resultado mais atual.
+- Plugins C#: `Kurage.Core` e `Kurage.RetakeWeapons` compilados em Release com
+  .NET 10, sem avisos ou erros.
+- Frontend: lint sem erros, 29 testes aprovados e build Next.js de produção concluído.
 - Teste visual no navegador local: indisponível nesta auditoria por falha do runtime
   confiável do navegador; não substituído por uma automação não autorizada.
 
-Os testes existentes não cobrem ainda PostgreSQL/Redis/Mongo reais, integrações
-externas, servidor dedicado CS2, cobrança ou o fluxo E2E comercial.
+Os testes ainda não cobrem integrações externas, servidor dedicado CS2, cobrança
+ou o fluxo E2E comercial. Consulte a [estratégia de testes](./docs/pt/11_testes_integracao.md).
 
 ## Produto e roadmap
 
@@ -125,8 +130,8 @@ semiprofissionais, com 18 anos ou mais, no Brasil e depois na América Latina. A
 métrica norte é **times ativos por semana com ao menos uma partida instrumentada
 concluída**.
 
-1. **P0 — confiança:** segredos fail-closed, bancos privados, Steam state/nonce,
-   uploads seguros, LGPD, CI, backups e documentação fiel.
+1. **P0 — confiança:** concluir credenciais individuais de servidor, uploads
+   seguros, account status, LGPD, backups e trilha de auditoria.
 2. **MVP — loop competitivo:** time web, partida idempotente, ELO auditável,
    telemetria confiável e servidor privado sob demanda.
 3. **Receita:** Mercado Pago, webhooks idempotentes, entitlements e créditos de
@@ -157,5 +162,9 @@ Kurage é independente e não possui afiliação ou endosso dessas empresas.
 - [Auditoria completa PT](./docs/pt/08_auditoria_estado_atual.md)
 - [Full audit EN](./docs/en/08_current_state_audit.md)
 - [Produto e mercado PT](./docs/pt/09_produto_mercado.md)
+- [Notificações no PostgreSQL PT](./docs/pt/10_notificacoes_postgres.md)
+- [Testes de integração PT](./docs/pt/11_testes_integracao.md)
+- [Operação e gate de release PT](./docs/pt/15_operacao_e_release.md)
+- [Prontidão jurídica PT](./docs/pt/16_prontidao_juridica.md)
+- [Deploy OCI/Vercel PT](./docs/pt/17_deploy_alpha_oci_vercel.md)
 - [Product and market EN](./docs/en/09_product_market.md)
-

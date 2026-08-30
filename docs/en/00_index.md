@@ -28,6 +28,14 @@ and CounterStrikeSharp plugins.
 flowchart TD
     A[00 — Index] --> B[08 — Factual audit]
     A --> C[09 — Product and market]
+    A --> K[10 — PostgreSQL notifications]
+    A --> L[11 — Integration testing]
+    A --> M[12 — Maré membership]
+    A --> N[13 — Authentication and security]
+    A --> O[14 — Consistency and observability]
+    A --> P[15 — Operations and release]
+    A --> Q[16 — Legal readiness]
+    A --> R[17 — OCI and Vercel deployment]
     A --> D[01 — Architecture]
     A --> E[02 — Backend]
     A --> F[03 — Frontend]
@@ -48,6 +56,14 @@ flowchart TD
 7. [Design system](./07_frontend_design_system.md)
 8. [Complete current-state audit](./08_current_state_audit.md)
 9. [Product, market, monetization, and portfolio](./09_product_market.md)
+10. [PostgreSQL notifications](./10_postgres_notifications.md)
+11. [Testing strategy with real services](./11_integration_testing.md)
+12. [Maré membership](./12_mare_membership.md)
+13. [Authentication, sessions, and trust boundary](./13_authentication_security.md)
+14. [Transactional consistency and observability](./14_transactional_consistency_observability.md)
+15. [Operations, recovery, and release gate](./15_operations_and_release.md)
+16. [Legal and privacy readiness](./16_legal_readiness.md)
+17. [OCI and Vercel alpha deployment](./17_oci_vercel_alpha_deployment.md)
 
 ## Repository policies
 
@@ -58,6 +74,6 @@ flowchart TD
 - [Security policy](../../SECURITY.md)
 - [Contribution policy](../../CONTRIBUTING.md)
 
-The former `kurage.caiomayan.com` and `apikurage.caiomayan.com` domains are
-configuration references, not evidence of an operational production environment.
-
+The `kurage.caiomayan.com` and `api.caiomayan.com` domains are the prepared alpha
+contract, but only become operational production after the first deployment and
+the gates documented in section 17.

@@ -22,6 +22,13 @@
     --mute: #444444;
     --ash: #333333;
     --stone: #222222;
+
+    /* Kurage identity accent. Subscribers replace the sea-glass current with Maré coral. */
+    --kurage-accent: #a9c8c0;
+    --kurage-accent-rgb: 169, 200, 192;
+    --kurage-accent-glow: rgba(169, 200, 192, 0.18);
+    --mare-accent: #ff4d6d;
+    --mare-accent-rgb: 255, 77, 109;
     
     /* Borders & Dividers - Ultra Fine */
     --hairline: rgba(255, 255, 255, 0.06);
@@ -40,6 +47,13 @@
     --accent-red-glow: rgba(229, 72, 77, 0.1);
 
     --link: #ededed;
+  }
+
+  :root[data-kurage-theme="mare"] {
+    --kurage-accent: var(--mare-accent);
+    --kurage-accent-rgb: var(--mare-accent-rgb);
+    --kurage-accent-glow: rgba(var(--mare-accent-rgb), 0.24);
+    --link: var(--mare-accent);
   }
 }
 
@@ -74,6 +88,9 @@
   --color-accent-red: var(--accent-red);
   --color-accent-red-glow: var(--accent-red-glow);
   --color-link: var(--link);
+  --color-accent: var(--kurage-accent);
+  --color-accent-glow: var(--kurage-accent-glow);
+  --color-mare: var(--mare-accent);
 
   /* Font Family Mapping */
   --font-display: var(--font-eb-garamond), serif;
@@ -88,7 +105,7 @@
   }
 
   *:focus-visible {
-    outline: 2px solid rgba(255,255,255,0.4);
+    outline: 2px solid rgba(var(--kurage-accent-rgb), 0.58);
     outline-offset: 2px;
   }
 
@@ -206,8 +223,8 @@
   left: 0;
   height: 100%;
   width: 320px;
-  background: linear-gradient(90deg, transparent 0%, rgba(169, 200, 192, 0.3) 20%, #a9c8c0 50%, #92bce3 80%, transparent 100%);
-  box-shadow: 0 0 12px 1.5px rgba(169, 200, 192, 0.7), 0 0 24px 3px rgba(146, 188, 227, 0.4);
+  background: linear-gradient(90deg, transparent 0%, rgba(var(--kurage-accent-rgb), 0.3) 20%, var(--kurage-accent) 50%, #92bce3 80%, transparent 100%);
+  box-shadow: 0 0 12px 1.5px rgba(var(--kurage-accent-rgb), 0.7), 0 0 24px 3px rgba(146, 188, 227, 0.4);
   animation: resend-border-beam 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   pointer-events: none;
 }

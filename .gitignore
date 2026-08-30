@@ -33,6 +33,8 @@
 
 # Java / Maven
 **/target/
+**/.m2-verify/
+**/.m2-*-verify/
 **/.mvn/timing.properties
 **/*.class
 hs_err_pid*
@@ -59,7 +61,10 @@ pnpm-debug.log*
 # .NET / CounterStrikeSharp
 **/bin/
 **/obj/
+**/.nuget/
 server/release/
+server/pluginsserver/
+.tmp-*/
 *.user
 *.suo
 *.userosscache

@@ -45,10 +45,12 @@ com.kurage.api
 | `TeamJoinRequest` | `team_join_requests` | Pedidos de entrada submetidos por jogadores para um time (`desired_role`, `status`, `reviewed_by`). |
 | `TeamInviteLink` | `team_invite_links` | Links tokenizados compartilháveis de convite com validade e limite de usos. |
 | `GameServer` | `game_servers` | Servidores oficiais de CS2 da plataforma Kurage (Retakes, DM, 5v5 Scrim). |
-| `ProfileVisit` | `profile_visits` | Registro de visualizações de perfil (recurso exclusivo do plano PLUS+). |
+| `ProfileVisit` | `profile_visits` | Registro de visualizações de perfil (recurso exclusivo do plano Maré). |
 | `UserFaceit` | `users_faceit` | Snapshot e integração de dados e partidas do perfil Faceit. |
 | `UserInventory` | `user_inventories` | Cache de inventário e skins de CS2 do jogador (JSONB). |
-| `Notification` | `notifications` (MongoDB) | Notificações assíncronas do usuário (convites, join requests, avisos de sistema). |
+| `User` (contato privado) | `users.email`, `users.phone_e164` | Canais opcionais, acessíveis exclusivamente pelo dono da conta; preparados para verificação e entrega futura. |
+| `Notification` | `notifications` | Conteúdo imutável e genérico de notificação no PostgreSQL. |
+| `NotificationDelivery` | `notification_deliveries` | Entrega por destinatário, com estado de leitura individual e índices de inbox. |
 
 ---
 
@@ -56,7 +58,7 @@ com.kurage.api
 
 | Enum | Localização | Valores | Finalidade |
 |---|---|---|---|
-| `SubscriptionTier` | `domain` | `FREE`, `PLUS`, `PRO`, `MAX` | Tiers de assinatura e controle de permissões em código (`has(feature)`). |
+| `SubscriptionTier` | `domain` | `FREE`, `MARE` | Plano único e controle de permissões em código (`has(feature)`). |
 | `ManagementRole` | `domain` | `OWNER`, `ADMIN`, `MEMBER` | Níveis de permissão administrativa dentro de um time. |
 | `TeamRole` | `domain` | `PLAYER`, `SUBSTITUTE`, `COACH`, `ASSISTANT_COACH` | Funções de alocação de lineup dentro de um time. |
 | `UserRole` | `domain` | `USER`, `ADMIN`, `OWNER` | Níveis de autoridade global na plataforma Kurage. |
@@ -65,7 +67,7 @@ com.kurage.api
 | `GameMode` | `domain` | `RETAKE`, `DEATHMATCH`, `COMPETITIVE_5V5`, `DM`, `FIVE_V_FIVE` | Modos de jogo dos servidores de CS2 da Kurage. |
 | `JoinRequestStatus` | `domain` | `PENDING`, `ACCEPTED`, `REJECTED` | Status de solicitações de entrada em times. |
 | `InvitationStatus` | `domain` | `PENDING`, `ACCEPTED`, `REJECTED` | Status de convites diretos enviados a jogadores. |
-| `NotificationType` | `domain.enums` | `SYSTEM`, `TEAM_INVITE`, `TEAM_ROLE_UPDATE`, `TEAM_CREATED`, `TEAM_JOIN_REQUEST`, `TEAM_JOIN_APPROVED`, `TEAM_JOIN_REJECTED`, `TEAM_INVITE_LINK_USED` | Tipos de eventos disparados na central de notificações. |
+| `NotificationType` | `domain.enums` | Tipos de time, sistema, anúncios/sugestões e amizade; tipos customizados também são aceitos como string validada. | Taxonomia inicial da central de notificações sem acoplar campanhas futuras a migrations. |
 
 ---
 
@@ -101,11 +103,9 @@ com.kurage.api
 
 Para evitar ambiguidade entre jogadores que pagam assinatura e jogadores profissionais verificados, o Kurage desacopla esses conceitos em duas dimensões independentes:
 
-1. **`subscriptionTier` (Enum):** `FREE`, `PLUS`, `PRO`, `MAX`
+1. **`subscriptionTier` (Enum):** `FREE`, `MARE`
    - *FREE:* Recursos padrão da plataforma.
-   - *PLUS:* Histórico de visitantes do perfil, badge PLUS no perfil.
-   - *PRO:* Estatísticas avançadas, filtros avançados de ranking, badge PRO em texto sutil (Sea Glass).
-   - *MAX:* Destaque de perfil na home, prioridade em servidores CS2, badge MAX.
+   - *MARE:* identidade coral, badge Maré, visitantes do perfil, estatísticas e filtros avançados, prioridade de fila e acesso antecipado. A disponibilidade de cada experiência depende da implementação do recurso correspondente.
 
 2. **`isVerifiedPro` (Boolean):**
    - Atribuído manualmente pela Kurage a atletas profissionais de CS2 verificados.
@@ -172,7 +172,7 @@ O sistema de busca da Kurage fornece resolução instantânea com ranqueamento p
   - `GET /users/kurage/{kurageId}`: Perfil público por Kurage ID (registra visita se autenticado).
   - `GET /users/{steamId64}`: Perfil público por Steam ID 64 (registra visita se autenticado).
   - `GET /users/{kurageId}/hovercard`: Dados leves de hovercard (K/D, Level, ELO, time, tier) com cache de 5 minutos.
-  - `GET /users/me/visitors`: Lista de visitantes recentes do perfil (exclusivo para assinantes `PLUS` ou superior).
+  - `GET /users/me/visitors`: Lista de visitantes recentes do perfil (exclusivo para assinantes `MARE`).
   - `GET /users/search?q={query}`: Busca rápida por username, SteamId ou Kurage ID.
   - `POST /users/me/avatar`: Upload de avatar para o Cloudflare R2 (S3).
   - `PUT /users/me/username`: Atualização de apelido.
@@ -183,7 +183,7 @@ O sistema de busca da Kurage fornece resolução instantânea com ranqueamento p
   - `GET /users/me/invites`: Lista de convites de time pendentes.
 
 ### 2. `SubscriptionService` & `PermissionService`
-- Controle desacoplado de tiers (`FREE`, `PLUS`, `PRO`, `MAX`).
+- Controle do plano único (`FREE`, `MARE`).
 - Verificação automática de expiração (`subscriptionExpiresAt`).
 - `PermissionService` concede acesso irrestrito para `ADMIN` e `OWNER` e valida features para usuários comuns via `SubscriptionService.hasFeature(user, feature)`.
 
@@ -209,8 +209,8 @@ O sistema de busca da Kurage fornece resolução instantânea com ranqueamento p
 - **Player Invite Search (`GET /search/players`):** Endpoint de alta performance para busca e convite de jogadores para times.
 
 ### 7. `RankingService` & `LeaderboardController` (Etapa 5)
-- **Player Ranking (`GET /leaderboard/players?page=0&size=20`):** Retorna o ranking global de jogadores ordenado por Kurage ELO com cálculo de nível, K/D, win rate, tag do time e delta de posição diário (`positionDelta = ontem - hoje`). Limitado a 200 posições máximas com cache Redis de 1 hora (`cache:ranking:players:page:{page}:size:{size}`).
-- **Player Ranking Context (`GET /leaderboard/players/{kurageId}/context`):** Retorna o contexto competitivo do jogador com posição atual, deltas de 24h e 7 dias, lista de ~5 jogadores adjacentes e identificação de quem é o próximo jogador a ser ultrapassado (`nextPlayerToPass`). Cache Redis de 5 minutos.
+- **Player Ranking (`GET /leaderboard/players?page=0&size=20`):** Retorna apenas jogadores com ao menos uma partida oficial, ordenados por Kurage ELO, com cálculo de nível, K/D, win rate, tag do time e delta de posição diário (`positionDelta = ontem - hoje`). Limitado a 200 posições máximas com cache Redis de 1 hora (`cache:ranking:players:page:{page}:size:{size}`).
+- **Player Ranking Context (`GET /leaderboard/players/{kurageId}/context`):** Retorna posição, deltas de 24h e 7 dias, jogadores adjacentes e próximo alvo. Para contas sem partidas, a posição e os deltas são `null`, sem adjacentes nem histórico fabricado. Cache Redis de 5 minutos.
 - **Team Ranking (`GET /leaderboard/teams?page=0&size=10`):** Retorna o ranking global de organizações e times ordenado por Team ELO com contagem de membros e delta diário de posições. Limitado a 50 posições máximas com cache Redis de 1 hora (`cache:ranking:teams:page:{page}:size:{size}`).
 - **Snapshots Diários Automáticos (`@Scheduled(cron = "0 0 4 * * *")`):** Rotina diária que persiste os snapshots históricos em `ranking_snapshots` e `team_ranking_snapshots`, garantindo histórico fiel de desempenho temporal e alimentando os deltas sem degradação do banco.
 
@@ -238,8 +238,9 @@ O sistema de busca da Kurage fornece resolução instantânea com ranqueamento p
 - **Atomicidade em Remoções & Integridade Referencial:**
   - A remoção de membros valida papéis hierárquicos.
   - Se o último membro sair do time, a exclusão do time é executada com efeito cascata atômico (`ON DELETE CASCADE` garantido no banco), blindando a base de dados contra registros órfãos ou inconsistências em módulos futuros.
-- **Eventos & Notificações MongoDB Integradas:**
-  - Disparo automático de notificações para `TEAM_CREATED`, `TEAM_INVITE`, `TEAM_ROLE_UPDATE`, `TEAM_JOIN_REQUEST`, `TEAM_JOIN_APPROVED`, `TEAM_JOIN_REJECTED` e `TEAM_INVITE_LINK_USED`.
+- **Eventos & Notificações PostgreSQL Integradas:**
+  - Disparo de notificações para `TEAM_CREATED`, `TEAM_INVITE`, `TEAM_ROLE_UPDATE`, `TEAM_JOIN_REQUEST`, `TEAM_JOIN_APPROVED`, `TEAM_JOIN_REJECTED` e `TEAM_INVITE_LINK_USED`, mantendo o convite ou pedido como entidade transacional própria.
+  - Consulte o [modelo de notificações](./10_notificacoes_postgres.md) para retenção, campanhas e evolução para amizades.
 - **Cache Redis & Concorrência:**
 ### 9. `GameServerService` & `GameServerController` (Etapa 7)
 - **Browser Público de Servidores (`GET /servers`):**
@@ -253,14 +254,16 @@ O sistema de busca da Kurage fornece resolução instantânea com ranqueamento p
   - Autenticação e proteção rigorosa via cabeçalho HTTP `X-Server-Api-Key` (validado contra a chave segura configurada).
   - Atualiza atomicamente `currentMap`, `currentPlayers`, `maxPlayers`, marca `isOnline = true` e atualiza `lastHeartbeat = NOW()`.
   - Invalida automaticamente os caches de servidores no Redis.
-- **Detecção de Servidores Offline (`@Scheduled(fixedRate = 120000)`):**
-  - Rotina agendada executada a cada 2 minutos (`markOfflineServers`) que detecta e marca como `isOnline = false` qualquer servidor que não enviar heartbeat há mais de 2 minutos, invalidando os caches de forma proativa.
+- **Detecção de Servidores Offline (`game.server.offline-scan-ms`, padrão 30.000 ms):**
+  - `markOfflineServers` marca como `isOnline = false` qualquer servidor sem heartbeat válido há mais de 90 segundos e invalida os caches de forma proativa.
+  - As respostas também calculam a validade efetiva no momento da leitura, impedindo que o intervalo da rotina ou um valor antigo no Redis exponha telemetria fantasma.
 
 ### 10. `InventoryService` & `InventoryController` (Etapa 7)
 - **Consulta de Inventário (`GET /inventory/{steamId64}`):**
   - Retorna o JSONB de itens e cosméticos de CS2 do jogador de forma pública e otimizada.
 - **Atualização de Inventário (`PUT /inventory/me`):**
-  - Endpoint autenticado permitindo a persistência e sincronização de skins e inventário do usuário logado.
+  - Endpoint autenticado que persiste o inventário JSONB e devolve a representação canônica confirmada pelo PostgreSQL.
+  - O frontend não usa `localStorage` como fonte de verdade: alterações só são exibidas após esta confirmação.
 
 ---
 
@@ -272,8 +275,9 @@ O sistema de busca da Kurage fornece resolução instantânea com ranqueamento p
 - Lógica de *retry* com `saveAndFlush` e captura de `DataIntegrityViolationException` no cadastro de novos jogadores.
 
 ### 2. Estratégia de Tolerância a Falhas do Redis (Fail-Open)
-- **Rate Limiting:** Em caso de indisponibilidade ou timeout do Redis, o `RateLimitingService` aplica a estratégia **Fail-Open** (retorna `true`), registrando aviso em log e garantindo que a API permaneça acessível para usuários legítimos.
+- **Rate Limiting:** contador e TTL são atômicos via Lua. Leituras públicas usam
+  **Fail-Open**; autenticação, mutações de inventário, convites e solicitações
+  usam **Fail-Closed** quando o Redis não consegue aplicar o limite.
 - **Cache de Perfis e Hovercards:** Se o Redis falhar durante a leitura ou escrita, os serviços engolem o erro e consultam diretamente o PostgreSQL (fallback transparente).
 - **Invalidação de Cache:** Protegida por `try-catch`, impedindo que falhas transitórias no Redis quebrem mutações de dados no banco relacional.
 - **Stateless Auth:** O sistema baseia-se em tokens JWT auto-contidos e assinados; quedas no Redis não provocam logouts em massa.
-

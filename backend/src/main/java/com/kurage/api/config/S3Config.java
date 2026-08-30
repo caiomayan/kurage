@@ -36,10 +36,19 @@ public class S3Config {
             );
         }
 
+        URI endpointUri = URI.create(endpoint);
+        if (!"https".equalsIgnoreCase(endpointUri.getScheme())
+                || endpointUri.getHost() == null
+                || (endpointUri.getPath() != null && !endpointUri.getPath().isBlank() && !"/".equals(endpointUri.getPath()))) {
+            throw new IllegalStateException(
+                    "Cloudflare R2 endpoint must be https://<ACCOUNT_ID>.r2.cloudflarestorage.com without the bucket name."
+            );
+        }
+
         AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
 
         return S3Client.builder()
-            .endpointOverride(URI.create(endpoint))
+            .endpointOverride(endpointUri)
             .credentialsProvider(StaticCredentialsProvider.create(credentials))
             .region(Region.of("auto"))
             .forcePathStyle(true) // Prevents SSL wildcard mismatch on multi-level subdomains

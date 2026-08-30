@@ -4,6 +4,7 @@ import com.kurage.api.domain.User;
 import com.kurage.api.dto.response.SteamProfileResponse;
 import com.kurage.api.service.RefreshTokenService;
 import com.kurage.api.service.SteamAuthService;
+import com.kurage.api.service.SteamLoginStateService;
 import com.kurage.api.service.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,18 +19,22 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class SteamAuthControllerTest {
 
-    private static final String FRONTEND_URL = "https://kurage.caiomayan.com";
+    private static final String FRONTEND_URL = "https://kurage.example.invalid";
+    private static final String STEAM_STATE = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     private SteamAuthService steamAuthService;
+    private SteamLoginStateService steamLoginStateService;
     private UserService userService;
     private RefreshTokenService refreshTokenService;
     private SteamAuthController controller;
@@ -37,11 +42,12 @@ class SteamAuthControllerTest {
     @BeforeEach
     void setUp() {
         steamAuthService = mock(SteamAuthService.class);
+        steamLoginStateService = mock(SteamLoginStateService.class);
         userService = mock(UserService.class);
         refreshTokenService = mock(RefreshTokenService.class);
-        controller = new SteamAuthController(steamAuthService, userService, refreshTokenService);
+        controller = new SteamAuthController(steamAuthService, steamLoginStateService, userService, refreshTokenService);
         ReflectionTestUtils.setField(controller, "frontendUrl", FRONTEND_URL);
-        ReflectionTestUtils.setField(controller, "cookieDomain", "caiomayan.com");
+        ReflectionTestUtils.setField(controller, "cookieDomain", "kurage.example.invalid");
         SecurityContextHolder.clearContext();
     }
 
@@ -53,13 +59,16 @@ class SteamAuthControllerTest {
     @Test
     void loginPreservesSafeLocalReturnUrl() throws Exception {
         String returnUrl = "/profile/76561198000000000?tab=stats";
-        when(steamAuthService.buildSteamLoginUrl(returnUrl)).thenReturn("https://steam.example/login");
+        when(steamLoginStateService.createState(returnUrl)).thenReturn(STEAM_STATE);
+        when(steamAuthService.buildSteamLoginUrl(STEAM_STATE)).thenReturn("https://steam.example/login");
+        MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        controller.loginWithSteam(returnUrl, response);
+        controller.loginWithSteam(returnUrl, request, response);
 
         assertEquals("https://steam.example/login", response.getRedirectedUrl());
-        verify(steamAuthService).buildSteamLoginUrl(returnUrl);
+        verify(steamLoginStateService).createState(returnUrl);
+        verify(steamAuthService).buildSteamLoginUrl(STEAM_STATE);
     }
 
     @ParameterizedTest
@@ -73,13 +82,16 @@ class SteamAuthControllerTest {
             "/profile/123\r\nLocation: https://evil.example"
     })
     void loginFallsBackToRootForUnsafeReturnUrl(String returnUrl) throws Exception {
-        when(steamAuthService.buildSteamLoginUrl("/")).thenReturn("https://steam.example/login");
+        when(steamLoginStateService.createState("/")).thenReturn(STEAM_STATE);
+        when(steamAuthService.buildSteamLoginUrl(STEAM_STATE)).thenReturn("https://steam.example/login");
+        MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        controller.loginWithSteam(returnUrl, response);
+        controller.loginWithSteam(returnUrl, request, response);
 
         assertEquals("https://steam.example/login", response.getRedirectedUrl());
-        verify(steamAuthService).buildSteamLoginUrl("/");
+        verify(steamLoginStateService).createState("/");
+        verify(steamAuthService).buildSteamLoginUrl(STEAM_STATE);
     }
 
     @Test
@@ -90,11 +102,13 @@ class SteamAuthControllerTest {
                 new UsernamePasswordAuthenticationToken(authenticatedUser, null, java.util.List.of())
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest request = new MockHttpServletRequest();
 
-        controller.loginWithSteam("//evil.example/path", response);
+        controller.loginWithSteam("//evil.example/path", request, response);
 
         assertEquals(FRONTEND_URL + "/", response.getRedirectedUrl());
         verifyNoInteractions(steamAuthService);
+        verifyNoInteractions(steamLoginStateService);
     }
 
     @Test
@@ -139,19 +153,32 @@ class SteamAuthControllerTest {
         assertEquals(FRONTEND_URL + "/", response.getRedirectedUrl());
     }
 
+    @Test
+    void callbackRejectsStateThatDoesNotMatchBrowserCookie() throws Exception {
+        MockHttpServletRequest request = callbackRequest("/inventory");
+        request.setCookies(new jakarta.servlet.http.Cookie("steam_login_state", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.steamCallback(request, response);
+
+        assertEquals(FRONTEND_URL + "/?error=steam_validation_failed", response.getRedirectedUrl());
+        verify(steamLoginStateService, never()).consumeState(anyString());
+        verify(steamAuthService, never()).validateSteamLogin(anyMap(), anyString());
+    }
+
     private void prepareSuccessfulCallback() throws Exception {
         String steamId64 = "76561198000000000";
         User user = new User();
         user.setSteamId64(steamId64);
 
-        when(steamAuthService.validateSteamLogin(any())).thenReturn(steamId64);
+        when(steamAuthService.buildCallbackUrl(STEAM_STATE)).thenReturn("https://api.example/auth/steam/callback?state=" + STEAM_STATE);
+        when(steamAuthService.validateSteamLogin(anyMap(), anyString())).thenReturn(steamId64);
         when(steamAuthService.fetchSteamProfile(steamId64))
                 .thenReturn(new SteamProfileResponse.Player("Player", "https://avatar.example/player.jpg"));
         when(userService.getOrCreateUser(
                 eq(steamId64),
                 eq("Player"),
                 eq("https://avatar.example/player.jpg"),
-                anyString(),
                 any()
         )).thenReturn(user);
         when(refreshTokenService.createRefreshToken(eq(steamId64), anyString(), any()))
@@ -160,9 +187,11 @@ class SteamAuthControllerTest {
 
     private MockHttpServletRequest callbackRequest(String returnUrl) {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addParameter("returnUrl", returnUrl);
+        request.addParameter("state", STEAM_STATE);
+        request.setCookies(new jakarta.servlet.http.Cookie("steam_login_state", STEAM_STATE));
         request.addHeader("User-Agent", "JUnit");
         request.setRemoteAddr("127.0.0.1");
+        when(steamLoginStateService.consumeState(STEAM_STATE)).thenReturn(returnUrl);
         return request;
     }
 }

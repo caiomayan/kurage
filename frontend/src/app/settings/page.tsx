@@ -11,7 +11,6 @@ import {
   PiCheck,
   PiCopy,
   PiArrowRight,
-  PiShieldCheck,
   PiSpinnerGap,
   PiWarningCircle,
   PiCheckCircle,
@@ -23,18 +22,90 @@ import {
   PiUploadSimple,
   PiSteamLogo,
   PiPencilSimple,
+  PiEnvelope,
 } from "react-icons/pi";
 import { useAuth } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { CountryFlag } from "@/components/ui/CountryFlag";
 import { RoleIcon } from "@/components/ui/RoleIcon";
 import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
 import { FaceitLevelIcon } from "@/components/ui/faceit-levels/FaceitLevelIcon";
+import { AvatarCropDialog, type AvatarCrop } from "@/components/settings/AvatarCropDialog";
 import type { InGameFunction, UserWithStats } from "@/types/user";
 
-type SettingsSection = "profile" | "tactical" | "integrations" | "passport";
+type SettingsSection = "profile" | "contact" | "tactical" | "integrations" | "passport";
+
+interface UserContact {
+  email: string | null;
+  phoneNumber: string | null;
+}
+
+type AvatarUploadFeedback = { type: "error" | "info"; text: string } | null;
+type AvatarCropSource =
+  | { kind: "file"; file: File; previewUrl: string }
+  | { kind: "steam"; previewUrl: string };
+
+const ALLOWED_AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+function waitForAvatarImage(url: string, timeoutMs = 8_000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const timeout = window.setTimeout(() => {
+      image.onload = null;
+      image.onerror = null;
+      reject(new Error("timeout"));
+    }, timeoutMs);
+
+    image.onload = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    image.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error("unavailable"));
+    };
+    image.src = url;
+  });
+}
+
+function getAvatarCropBounds(width: number, height: number, crop: AvatarCrop) {
+  const cropSize = Math.min(width, height) / crop.zoom;
+  const maxLeft = width - cropSize;
+  const maxTop = height - cropSize;
+
+  return {
+    left: maxLeft / 2 - crop.positionX * maxLeft / 2,
+    top: maxTop / 2 - crop.positionY * maxTop / 2,
+    size: cropSize,
+  };
+}
+
+async function cropLocalAvatar(file: File, crop: AvatarCrop): Promise<File> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("invalid-image"));
+      element.src = objectUrl;
+    });
+    const { left, top, size } = getAvatarCropBounds(image.naturalWidth, image.naturalHeight, crop);
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("canvas-unavailable");
+
+    context.drawImage(image, left, top, size, size, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("crop-unavailable");
+    return new File([blob], "avatar.png", { type: "image/png" });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 interface CountryOption {
   code: string;
@@ -113,15 +184,21 @@ export default function SettingsPage() {
   const [primaryFunction, setPrimaryFunction] = useState<InGameFunction>("CORINGA");
   const [secondaryFunction, setSecondaryFunction] = useState<InGameFunction | null>(null);
   const [country, setCountry] = useState<string>("BR");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
 
   // Avatar Modal State
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [avatarUploadFeedback, setAvatarUploadFeedback] = useState<AvatarUploadFeedback>(null);
+  const [avatarCropSource, setAvatarCropSource] = useState<AvatarCropSource | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Loading states & micro-feedbacks
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [isSavingUsername, setIsSavingUsername] = useState(false);
   const [isSavingTactical, setIsSavingTactical] = useState(false);
+  const [isLoadingContact, setIsLoadingContact] = useState(true);
+  const [isSavingContact, setIsSavingContact] = useState(false);
   const [isSyncingFaceit, setIsSyncingFaceit] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -129,12 +206,37 @@ export default function SettingsPage() {
   // Initialize values from authenticated user
   useEffect(() => {
     if (user) {
-      setUsername(user.username || "");
-      if (user.primaryFunction) setPrimaryFunction(user.primaryFunction);
-      setSecondaryFunction(user.secondaryFunction || null);
-      if (user.country) setCountry(user.country);
+      queueMicrotask(() => {
+        setUsername(user.username || "");
+        if (user.primaryFunction) setPrimaryFunction(user.primaryFunction);
+        setSecondaryFunction(user.secondaryFunction || null);
+        if (user.country) setCountry(user.country);
+      });
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isCurrent = true;
+    api.get<UserContact>("/users/me/contact")
+      .then((contact) => {
+        if (!isCurrent) return;
+        setContactEmail(contact.email || "");
+        setContactPhone(contact.phoneNumber || "");
+      })
+      .catch(() => {
+        // The form remains empty when the API is unavailable; saving surfaces a
+        // user-facing error and no private data is rendered from public profile data.
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingContact(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isAuthenticated]);
 
   const showToast = (text: string, type: "success" | "error" = "success") => {
     setToastMessage({ text, type });
@@ -166,43 +268,93 @@ export default function SettingsPage() {
     }
   };
 
-  // Upload custom avatar
+  const closeAvatarCropper = () => {
+    if (avatarCropSource?.kind === "file") URL.revokeObjectURL(avatarCropSource.previewUrl);
+    setAvatarCropSource(null);
+  };
+
+  const uploadAvatarFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const updatedUser = await api.post<UserWithStats>("/users/me/avatar", formData);
+    const currentUser = await refreshUser();
+    const avatarUrl = currentUser?.avatarUrl ?? updatedUser.avatarUrl;
+    if (!avatarUrl) throw new Error("missing-avatar-url");
+
+    setAvatarUploadFeedback({ type: "info", text: "Arquivo recebido. Verificando a imagem pública…" });
+    await waitForAvatarImage(avatarUrl);
+  };
+
+  // Opens the editor instead of committing a raw image immediately.
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setAvatarUploadFeedback(null);
+
     // Validate size (< 5MB) and type
     if (file.size > 5 * 1024 * 1024) {
-      showToast("A imagem deve ter menos de 5MB.", "error");
+      const message = "A imagem deve ter menos de 5 MB.";
+      setAvatarUploadFeedback({ type: "error", text: message });
+      showToast(message, "error");
+      return;
+    }
+    if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+      const message = "Use uma imagem PNG, JPG ou WebP.";
+      setAvatarUploadFeedback({ type: "error", text: message });
+      showToast(message, "error");
       return;
     }
 
+    setAvatarCropSource({ kind: "file", file, previewUrl: URL.createObjectURL(file) });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleChooseSteamAvatar = async () => {
+    setAvatarUploadFeedback(null);
     setIsUpdatingAvatar(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      await api.post("/users/me/avatar", formData);
-      await refreshUser();
-      setIsAvatarModalOpen(false);
-      showToast("Avatar atualizado com sucesso!");
-    } catch {
-      showToast("Erro ao enviar imagem de avatar.", "error");
+      const source = await api.get<{ avatarUrl: string }>("/users/me/steam-avatar");
+      if (!source.avatarUrl) throw new Error("missing-steam-avatar");
+      setAvatarCropSource({ kind: "steam", previewUrl: source.avatarUrl });
+    } catch (error) {
+      const message = error instanceof ApiError
+        ? `Não foi possível obter seu avatar da Steam: ${error.message}`
+        : "Não foi possível obter seu avatar da Steam.";
+      setAvatarUploadFeedback({ type: "error", text: message });
+      showToast(message, "error");
     } finally {
       setIsUpdatingAvatar(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  // Sync Steam Avatar only
-  const handleSyncSteamAvatar = async () => {
+  const handleSaveAvatarCrop = async (crop: AvatarCrop) => {
+    if (!avatarCropSource) return;
+
     setIsUpdatingAvatar(true);
+    setAvatarUploadFeedback(null);
     try {
-      await api.put("/users/me/steam-sync?type=avatar");
-      await refreshUser();
+      if (avatarCropSource.kind === "file") {
+        await uploadAvatarFile(await cropLocalAvatar(avatarCropSource.file, crop));
+      } else {
+        const updatedUser = await api.post<UserWithStats>("/users/me/avatar/steam", crop);
+        const currentUser = await refreshUser();
+        const avatarUrl = currentUser?.avatarUrl ?? updatedUser.avatarUrl;
+        if (!avatarUrl) throw new Error("missing-avatar-url");
+        setAvatarUploadFeedback({ type: "info", text: "Foto recebida. Verificando a imagem pública…" });
+        await waitForAvatarImage(avatarUrl);
+      }
+
+      closeAvatarCropper();
       setIsAvatarModalOpen(false);
-      showToast("Avatar sincronizado com sua conta Steam.");
-    } catch {
-      showToast("Erro ao sincronizar avatar da Steam.", "error");
+      showToast("Avatar atualizado com sucesso!");
+    } catch (error) {
+      const message = error instanceof ApiError
+        ? `Não foi possível atualizar o avatar: ${error.message}`
+        : "Não foi possível concluir o recorte. Verifique a configuração do armazenamento de imagens.";
+      setAvatarUploadFeedback({ type: "error", text: message });
+      closeAvatarCropper();
+      showToast(message, "error");
     } finally {
       setIsUpdatingAvatar(false);
     }
@@ -239,6 +391,23 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveContact = async () => {
+    setIsSavingContact(true);
+    try {
+      const contact = await api.put<UserContact>("/users/me/contact", {
+        email: contactEmail.trim() || null,
+        phoneNumber: contactPhone.trim() || null,
+      });
+      setContactEmail(contact.email || "");
+      setContactPhone(contact.phoneNumber || "");
+      showToast("Canais de contato atualizados.");
+    } catch {
+      showToast("Revise o e-mail e o telefone antes de salvar.", "error");
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
+
   // Sync Faceit Data
   const handleSyncFaceit = async () => {
     setIsSyncingFaceit(true);
@@ -256,7 +425,7 @@ export default function SettingsPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#020507] flex items-center justify-center text-ink">
-        <PiSpinnerGap className="w-7 h-7 animate-spin text-[#a9c8c0]" />
+        <PiSpinnerGap className="w-7 h-7 animate-spin text-[var(--kurage-accent)]" />
       </div>
     );
   }
@@ -265,7 +434,7 @@ export default function SettingsPage() {
     return (
       <div className="relative min-h-screen bg-[#020507] font-sans text-ink flex items-center justify-center p-6">
         <div className="relative z-10 max-w-sm w-full text-center flex flex-col items-center gap-6">
-          <PiUser className="w-10 h-10 text-[#a9c8c0]/80" />
+          <PiUser className="w-10 h-10 text-[var(--kurage-accent)]/80" />
           <div className="flex flex-col gap-2">
             <h1 className="font-display text-[24px] font-bold text-white tracking-tight">
               Configurações da Conta
@@ -293,6 +462,7 @@ export default function SettingsPage() {
 
   const navItems = [
     { id: "profile" as SettingsSection, label: "Perfil", icon: PiUser },
+    { id: "contact" as SettingsSection, label: "Comunicação", icon: PiEnvelope },
     { id: "tactical" as SettingsSection, label: "Especialização CS2", icon: PiCrosshair },
     { id: "integrations" as SettingsSection, label: "Conexões & Telemetria", icon: PiArrowsClockwise },
     { id: "passport" as SettingsSection, label: "Passaporte & Assinatura", icon: PiSparkle },
@@ -305,7 +475,7 @@ export default function SettingsPage() {
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div
           className="absolute -top-[20%] left-1/2 -translate-x-1/2 w-[800px] h-[450px] rounded-full opacity-[0.05] blur-[150px]"
-          style={{ background: "radial-gradient(circle, #a9c8c0 0%, #92bce3 60%, transparent 80%)" }}
+          style={{ background: "radial-gradient(circle, var(--kurage-accent) 0%, #92bce3 60%, transparent 80%)" }}
         />
       </div>
 
@@ -342,7 +512,7 @@ export default function SettingsPage() {
         
         {/* Header */}
         <div className="flex flex-col gap-1 pb-8 border-b border-white/[0.06] mb-8">
-          <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-[#a9c8c0]/80">
+          <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-[var(--kurage-accent)]/80">
             <span>Configurações</span>
           </div>
           <h1 className="font-display text-[26px] sm:text-[30px] font-bold text-white tracking-tight">
@@ -373,7 +543,7 @@ export default function SettingsPage() {
                       : "text-stone-400 hover:text-stone-200 hover:bg-white/[0.02]"
                   )}
                 >
-                  <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-[#a9c8c0]" : "text-stone-400")} />
+                  <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-[var(--kurage-accent)]" : "text-stone-400")} />
                   <span className="truncate">{item.label}</span>
                 </button>
               );
@@ -395,7 +565,10 @@ export default function SettingsPage() {
                   {/* Avatar with Camera Trigger Overlay */}
                   <div className="relative group/avatar mb-4">
                     <div
-                      onClick={() => setIsAvatarModalOpen(true)}
+                      onClick={() => {
+                        setAvatarUploadFeedback(null);
+                        setIsAvatarModalOpen(true);
+                      }}
                       className="relative cursor-pointer rounded-full overflow-hidden transition-transform duration-200 group-hover/avatar:scale-[1.02] shadow-[0_0_30px_rgba(0,0,0,0.8)]"
                       title="Alterar foto de perfil"
                     >
@@ -440,7 +613,7 @@ export default function SettingsPage() {
                           }}
                           autoFocus
                           maxLength={32}
-                          className="bg-white/[0.06] border border-[#a9c8c0]/40 rounded-[6px] px-2.5 py-1 text-[18px] sm:text-[20px] font-display font-bold text-white text-center focus:outline-none"
+                          className="bg-white/[0.06] border border-[var(--kurage-accent)]/40 rounded-[6px] px-2.5 py-1 text-[18px] sm:text-[20px] font-display font-bold text-white text-center focus:outline-none"
                         />
                         <button
                           type="button"
@@ -524,7 +697,68 @@ export default function SettingsPage() {
             )}
 
             {/* ══════════════════════════════════════════════════════════ */}
-            {/* SECTION 2: ESPECIALIZAÇÃO CS2                             */}
+            {/* SECTION 2: COMUNICAÇÃO PRIVADA                            */}
+            {/* ══════════════════════════════════════════════════════════ */}
+            {activeSection === "contact" && (
+              <div className="flex flex-col gap-7">
+                <div className="flex flex-col gap-2 pb-6 border-b border-white/[0.06]">
+                  <div className="flex items-center gap-2">
+                    <PiEnvelope className="w-4 h-4 text-[var(--kurage-accent)]" />
+                    <span className="text-[14px] font-medium text-white">Canais de comunicação</span>
+                  </div>
+                  <p className="text-[13px] text-stone-400 leading-relaxed">
+                    Opcional e privado. Estes dados não aparecem no seu perfil público. E-mail e WhatsApp ainda não são usados para envios; quando os canais forem ativados, haverá confirmação e preferência explícita.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-5">
+                  <label className="flex flex-col gap-2">
+                    <span className="text-[13px] font-medium text-white">E-mail</span>
+                    <input
+                      type="email"
+                      value={contactEmail}
+                      onChange={(event) => setContactEmail(event.target.value)}
+                      placeholder="voce@exemplo.com"
+                      autoComplete="email"
+                      maxLength={254}
+                      disabled={isLoadingContact || isSavingContact}
+                      className="h-11 rounded-[6px] border border-white/[0.1] bg-white/[0.04] px-3 text-[14px] text-white placeholder:text-stone-600 focus:border-[var(--kurage-accent)]/60 focus:outline-none disabled:opacity-50"
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-2">
+                    <span className="text-[13px] font-medium text-white">Telefone / WhatsApp</span>
+                    <input
+                      type="tel"
+                      value={contactPhone}
+                      onChange={(event) => setContactPhone(event.target.value)}
+                      placeholder="+55 85 99999-9999"
+                      autoComplete="tel"
+                      maxLength={40}
+                      disabled={isLoadingContact || isSavingContact}
+                      className="h-11 rounded-[6px] border border-white/[0.1] bg-white/[0.04] px-3 text-[14px] text-white placeholder:text-stone-600 focus:border-[var(--kurage-accent)]/60 focus:outline-none disabled:opacity-50"
+                    />
+                    <span className="text-[12px] text-stone-500">Use código do país, por exemplo: +55 85 99999-9999.</span>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 pt-2">
+                  <span className="text-[12px] text-stone-500">Deixe um campo vazio para remover aquele contato.</span>
+                  <button
+                    type="button"
+                    onClick={handleSaveContact}
+                    disabled={isLoadingContact || isSavingContact}
+                    className="h-10 shrink-0 inline-flex items-center justify-center gap-2 rounded-[6px] bg-white px-4 text-[13px] font-medium text-black transition-colors hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSavingContact && <PiSpinnerGap className="h-4 w-4 animate-spin" />}
+                    <span>Salvar contato</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════ */}
+            {/* SECTION 3: ESPECIALIZAÇÃO CS2                             */}
             {/* ══════════════════════════════════════════════════════════ */}
             {activeSection === "tactical" && (
               <div className="divide-y divide-white/[0.06]">
@@ -554,7 +788,7 @@ export default function SettingsPage() {
                           className={cn(
                             "flex items-center gap-2.5 px-3.5 py-2.5 rounded-[6px] text-left transition-all cursor-pointer border",
                             isSelected
-                              ? "bg-white/[0.08] border-[#a9c8c0]/40 text-white shadow-[0_0_12px_rgba(169,200,192,0.1)]"
+                              ? "bg-white/[0.08] border-[var(--kurage-accent)]/40 text-white shadow-[0_0_12px_rgba(var(--kurage-accent-rgb),0.1)]"
                               : "bg-transparent border-white/[0.06] text-stone-400 hover:text-stone-200 hover:border-white/10"
                           )}
                         >
@@ -633,7 +867,7 @@ export default function SettingsPage() {
                   </div>
 
                   {isSavingTactical && (
-                    <PiSpinnerGap className="w-4 h-4 animate-spin text-[#a9c8c0]" />
+                    <PiSpinnerGap className="w-4 h-4 animate-spin text-[var(--kurage-accent)]" />
                   )}
                 </div>
 
@@ -704,10 +938,10 @@ export default function SettingsPage() {
                       type="button"
                       onClick={handleSyncFaceit}
                       disabled={isSyncingFaceit}
-                      className="p-2 text-stone-400 hover:text-[#a9c8c0] transition-colors cursor-pointer disabled:opacity-40"
+                      className="p-2 text-stone-400 hover:text-[var(--kurage-accent)] transition-colors cursor-pointer disabled:opacity-40"
                       title="Re-sincronizar dados Faceit"
                     >
-                      <PiArrowsClockwise className={cn("w-4 h-4", isSyncingFaceit && "animate-spin text-[#a9c8c0]")} />
+                      <PiArrowsClockwise className={cn("w-4 h-4", isSyncingFaceit && "animate-spin text-[var(--kurage-accent)]")} />
                     </button>
                   </div>
                 </div>
@@ -732,8 +966,13 @@ export default function SettingsPage() {
                     </span>
                   </div>
 
-                  <span className="px-2.5 py-0.5 rounded-[4px] bg-[#a9c8c0]/15 border border-[#a9c8c0]/30 text-[11px] font-mono font-bold text-[#a9c8c0] uppercase tracking-wider">
-                    {user.subscriptionTier || "FREE"}
+                  <span className={cn(
+                    "rounded-[4px] border px-2.5 py-0.5 font-mono text-[11px] font-bold uppercase tracking-wider",
+                    user.subscriptionTier === "MARE"
+                      ? "border-[var(--mare-accent)]/30 bg-[var(--mare-accent)]/15 text-[var(--mare-accent)]"
+                      : "border-white/[0.1] bg-white/[0.04] text-stone-400"
+                  )}>
+                    {user.subscriptionTier === "MARE" ? "Maré" : "Livre"}
                   </span>
                 </div>
 
@@ -753,31 +992,36 @@ export default function SettingsPage() {
 
                   <div className="flex flex-col">
                     <span className="text-[11px] font-mono uppercase text-mute">Nível Kurage</span>
-                    <span className="text-[14px] font-medium text-[#a9c8c0] mt-1">Nível {kurageLevel}</span>
+                    <span className="text-[14px] font-medium text-[var(--kurage-accent)] mt-1">Nível {kurageLevel}</span>
                   </div>
                 </div>
 
                 {/* Active Capabilities */}
                 <div className="pt-8 flex flex-col gap-3">
-                  <span className="text-[13px] font-medium text-white">Recursos Ativos</span>
+                  <span className="text-[13px] font-medium text-white">
+                    {user.subscriptionTier === "MARE" ? "Benefícios Maré" : "Recursos ativos"}
+                  </span>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[13px] text-stone-300">
-                    <div className="flex items-center gap-2">
-                      <PiCheck className="w-3.5 h-3.5 text-[#11ff99]" />
-                      <span>Telemetria HLTV 2.0 por round</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <PiCheck className="w-3.5 h-3.5 text-[#11ff99]" />
-                      <span>Classificação oficial no Ranking</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <PiCheck className="w-3.5 h-3.5 text-[#11ff99]" />
-                      <span>Acesso ao servidor O Mar</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <PiCheck className="w-3.5 h-3.5 text-[#11ff99]" />
-                      <span>Histórico completo de partidas</span>
-                    </div>
+                    {(user.subscriptionTier === "MARE"
+                      ? [
+                          "Tema e selo Maré",
+                          "Prioridade nos servidores oficiais",
+                          "Histórico e análises avançadas",
+                          "Acesso antecipado a novidades",
+                        ]
+                      : [
+                          "Passaporte competitivo",
+                          "Classificação oficial no ranking",
+                          "Acesso aos servidores públicos",
+                          "Inventário personalizado",
+                        ]
+                    ).map((capability) => (
+                      <div key={capability} className="flex items-center gap-2">
+                        <PiCheck className={cn("h-3.5 w-3.5", user.subscriptionTier === "MARE" ? "text-[var(--mare-accent)]" : "text-[#11ff99]")} />
+                        <span>{capability}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -860,18 +1104,44 @@ export default function SettingsPage() {
                   <span>Fazer upload de foto</span>
                 </button>
 
+                {avatarUploadFeedback && (
+                  <p
+                    role="alert"
+                    className={cn(
+                      "rounded-[6px] border px-3 py-2 text-xs leading-5",
+                      avatarUploadFeedback.type === "error"
+                        ? "border-red-400/25 bg-red-400/[0.07] text-red-200"
+                        : "border-[var(--kurage-accent)]/25 bg-[var(--kurage-accent)]/[0.07] text-[#c8e1d9]",
+                    )}
+                  >
+                    {avatarUploadFeedback.text}
+                  </p>
+                )}
+
                 <button
                   type="button"
-                  onClick={handleSyncSteamAvatar}
+                  onClick={handleChooseSteamAvatar}
                   disabled={isUpdatingAvatar}
                   className="flex items-center justify-center gap-2 h-10 rounded-[6px] bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-stone-300 hover:text-white font-sans font-medium text-[13px] transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  <PiSteamLogo className="w-4 h-4 text-[#a9c8c0]" />
-                  <span>Usar avatar oficial da Steam</span>
+                  <PiSteamLogo className="w-4 h-4 text-[var(--kurage-accent)]" />
+                  <span>Escolher avatar da Steam</span>
                 </button>
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {avatarCropSource && (
+          <AvatarCropDialog
+            imageUrl={avatarCropSource.previewUrl}
+            sourceLabel={avatarCropSource.kind === "steam" ? "Avatar oficial da Steam" : "Nova foto de perfil"}
+            isSaving={isUpdatingAvatar}
+            onCancel={closeAvatarCropper}
+            onSave={handleSaveAvatarCrop}
+          />
         )}
       </AnimatePresence>
 
@@ -983,7 +1253,7 @@ function CountryComboboxMinimal({ value, onChange }: CountryComboboxMinimalProps
                       <CountryFlag country={c.code} />
                       <span>{c.name}</span>
                     </div>
-                    {isSelected && <PiCheck className="w-3.5 h-3.5 text-[#a9c8c0]" />}
+                    {isSelected && <PiCheck className="w-3.5 h-3.5 text-[var(--kurage-accent)]" />}
                   </button>
                 );
               })}

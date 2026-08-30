@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -51,5 +52,17 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Parâmetro obrigatório ausente: q"));
+    }
+
+    @Test
+    void returns413ForMultipartBodiesRejectedBeforeControllerExecution() {
+        var response = new GlobalExceptionHandler().handleMaxUploadSizeExceededException(
+                new MaxUploadSizeExceededException(5L * 1024L * 1024L));
+
+        org.junit.jupiter.api.Assertions.assertEquals(HttpStatus.CONTENT_TOO_LARGE, response.getStatusCode());
+        org.junit.jupiter.api.Assertions.assertEquals(413, response.getBody().status());
+        org.junit.jupiter.api.Assertions.assertEquals(
+                "A imagem deve ter no máximo 5 MB.",
+                response.getBody().message());
     }
 }

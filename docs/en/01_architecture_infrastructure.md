@@ -1,70 +1,73 @@
-# Architecture & Infrastructure
+# Architecture and infrastructure
 
-> **Status note (20 August 2026):** this document mixes implementation and intent.
-> Use the [factual audit](./08_current_state_audit.md) as the current reference;
-> the backend is a modular monolith and public production is not validated.
+> **Status on 29 August 2026:** the alpha topology is implemented in the
+> repository but has not been applied to external accounts. The
+> [factual audit](./08_current_state_audit.md) remains the source of functional
+> readiness claims.
 
-[← Return to Master Node](./00_index.md)
+[← Return to the index](./00_index.md)
 
----
+## Adopted topology
 
-## 🏛️ Topology Overview
-
-The **Kurage** ecosystem employs a decoupled, cloud-native architecture distributed across Vercel, Linux VPS (Oracle Cloud/AWS), and Cloudflare.
+Kurage is a modular monolith, not a microservices system. The browser loads
+Next.js from Vercel and consumes the public API through Cloudflare. The API and
+both data stores share one OCI VM during alpha.
 
 ```mermaid
-flowchart TB
-    Client((Player / Browser))
-    CS2Server[CS2 Servers (DM / Retake / 5v5)]
-    
-    subgraph Vercel [Vercel Edge]
-        NextJS[Next.js 16 App Router]
-        Proxy[cstrike.app Inventory Proxy]
-    end
-    
-    subgraph CloudHost [Host Cloud / VPS Linux]
-        direction TB
-        Caddy[Caddy Reverse Proxy (HTTPS)]
-        Spring[Spring Boot 4 / Java 21 API]
-        Postgres[(PostgreSQL 16 + Flyway)]
-        Redis[(Redis 7 - Cache & Sessions)]
-        Mongo[(MongoDB 6 - Notifications)]
-        
-        Caddy --> Spring
-        Spring <--> Postgres
-        Spring <--> Redis
-        Spring <--> Mongo
-    end
-    
-    subgraph Cloudflare [Cloudflare R2]
-        R2[(Bucket kurage-bucket)]
-    end
-    
-    Client <-->|HTTPS kurage.caiomayan.com| NextJS
-    NextJS <-->|HTTPS apikurage.caiomayan.com| Caddy
-    CS2Server -->|POST /servers/:id/heartbeat| Caddy
-    Spring <-->|S3 SDK| R2
-    Proxy -.->|Proxy cstrike.app| Client
+flowchart LR
+    User[Player / browser] -->|kurage.caiomayan.com| FE[Next.js 16<br/>Vercel]
+    User -->|api.caiomayan.com| CF[Cloudflare proxy]
+    FE -->|authenticated REST| CF
+    GS[CS2 server] -->|HTTPS heartbeat| CF
+    CF --> Caddy[Caddy on OCI]
+    Caddy --> API[Spring Boot 4 / Java 21]
+    API --> PG[(PostgreSQL 16)]
+    API --> Redis[(Redis 7)]
+    API --> R2[Cloudflare R2]
+    API --> Steam[Steam]
+    API --> Faceit[FACEIT]
 ```
 
----
+## Components
 
-## 🚀 Hosting Environments
+### Frontend
 
-### 1. Frontend (Vercel)
-- **Domain:** `kurage.caiomayan.com`
-- **Stack:** Next.js 16 (App Router), TypeScript Strict, Tailwind CSS / CSS custom properties.
-- **Role:** Server-Side Rendering (SSR) for SEO and OpenGraph metadata, Server Components for lightning-fast initial load, and interactive Client Components (Command Palette `⌘K`, Hovercards, Server Browser).
+- Vercel is linked to the GitHub repository with `frontend` as root directory.
+- Alpha domain: `kurage.caiomayan.com`.
+- Public variables target `https://api.caiomayan.com`.
+- Preview origins never receive credentialed wildcard CORS. An authenticated
+  preview needs one stable, explicitly authorized hostname.
 
-### 2. Backend API (Linux VPS / Docker Compose)
-- **Domain:** `apikurage.caiomayan.com`
-- **Stack:** Java 21 (Virtual Threads enabled), Spring Boot 4.1.
-- **Caddy:** Automatic Let's Encrypt TLS termination and reverse proxy to port `8080`.
-- **PostgreSQL 16:** Relational database managed with Flyway migrations (`V1__kurage_init.sql`).
-- **Redis 7:** High-throughput cache (leaderboards, hovercards, quick search, server heartbeats) and rotating refresh token sessions.
-- **MongoDB 6:** Document store for user notifications (team invites, join requests, system notices).
+### Backend and data
 
-### 3. Cloudflare R2 (Object Storage)
-- **Bucket:** `kurage-bucket`
-- **Protocol:** S3-compatible API (AWS SDK v2 for Java).
-- **Role:** CDN delivery for custom player avatars and team crests.
+- OCI `VM.Standard.A1.Flex`, ARM64, 2 OCPUs, 6 GB, Ubuntu 24.04.
+- Caddy exposes only 80/443; Spring, PostgreSQL, and Redis remain on the Compose
+  network.
+- PostgreSQL is the transactional store, including inventory, teams,
+  invitations, and notifications.
+- Redis stores ephemeral sessions, revocation, rate limits, and caches.
+- Production PostgreSQL pool: maximum 10, minimum idle 2.
+- Prepared limits: API 1.6 GB, PostgreSQL 1.2 GB, Redis 384 MB, Caddy 256 MB.
+
+### Network and trust
+
+- `api.caiomayan.com` is a proxied Cloudflare A record targeting the reserved OCI
+  IP.
+- The NSG accepts 80/443 only from Cloudflare's published IPv4 ranges.
+- Caddy trusts `CF-Connecting-IP` only when the direct peer is Cloudflare.
+- SSH uses a dedicated key with passwords and root disabled. Temporary exposure
+  for dynamic GitHub runner IPs is recorded as an alpha tradeoff.
+
+### Delivery
+
+- Terraform 1.12+ uses OCI Object Storage state with locking and versioning.
+- GitHub Actions tests before publishing an ARM64/AMD64 GHCR image.
+- The VM receives an immutable digest and rolls back if API health never passes.
+- Runtime uses Docker Compose; only the Terraform module depends on Oracle.
+
+## Operations
+
+See the [alpha deployment](./17_oci_vercel_alpha_deployment.md) and
+[`infra/README.md`](../../infra/README.md) for credentials, DNS, first apply,
+release, and migration. Off-host backup and a real restore remain mandatory
+gates.

@@ -46,7 +46,7 @@ public record UserResponse(
                 user.getPrimaryFunction() != null ? user.getPrimaryFunction().name() : null,
                 user.getSecondaryFunction() != null ? user.getSecondaryFunction().name() : null,
                 user.getCountry(),
-                user.getSubscriptionTier() != null ? user.getSubscriptionTier().name() : "FREE",
+                user.getEffectiveSubscriptionTier().name(),
                 user.getSubscriptionExpiresAt(),
                 user.isVerifiedPro(),
                 stats,

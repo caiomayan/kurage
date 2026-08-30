@@ -49,7 +49,7 @@ export function MapPerformanceChart({ data }: MapPerformanceChartProps) {
               color: "#fff"
             }}
             itemStyle={{ color: "var(--ink)" }}
-            formatter={(value: any, name: any) => {
+            formatter={(value, name) => {
               if (name === "Win Rate") return [`${value}%`, "Win Rate"];
               return [value, name];
             }}

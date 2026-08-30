@@ -32,10 +32,11 @@ class PermissionServiceTest {
     @Test
     void testRegularUserFeaturesBasedOnSubscription() {
         User freeUser = User.builder().role(UserRole.USER).subscriptionTier(SubscriptionTier.FREE).build();
-        User plusUser = User.builder().role(UserRole.USER).subscriptionTier(SubscriptionTier.PLUS).build();
+        User mareUser = User.builder().role(UserRole.USER).subscriptionTier(SubscriptionTier.MARE).build();
 
         assertFalse(permissionService.hasFeature(freeUser, "PROFILE_VISITORS"));
-        assertTrue(permissionService.hasFeature(plusUser, "PROFILE_VISITORS"));
-        assertFalse(permissionService.hasFeature(plusUser, "ADVANCED_STATS"));
+        assertTrue(permissionService.hasFeature(mareUser, "PROFILE_VISITORS"));
+        assertTrue(permissionService.hasFeature(mareUser, "ADVANCED_STATS"));
+        assertTrue(permissionService.hasFeature(mareUser, "EARLY_ACCESS"));
     }
 }

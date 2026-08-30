@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 /**
  * ProfileOceanicBackground
  * A unique, bespoke abyssal atmosphere designed specifically for the Player Profile.
- * Incorporates the exact palette of Home Section 1 (#a9c8c0 seafoam + #92bce3 pelagic blue + canvas black),
+ * Incorporates the exact palette of Home Section 1 (var(--kurage-accent) seafoam + #92bce3 pelagic blue + canvas black),
  * with unique fluid luminous caustic wave ribbons, breathing abyssal orbs, and suspended bioluminescent drift.
  */
 export function ProfileOceanicBackground() {
@@ -23,7 +23,7 @@ export function ProfileOceanicBackground() {
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 90% 75% at 50% 25%, rgba(169, 200, 192, 0.16) 0%, rgba(146, 188, 227, 0.06) 50%, transparent 85%)",
+            "radial-gradient(ellipse 90% 75% at 50% 25%, rgba(var(--kurage-accent-rgb),0.16) 0%, rgba(146, 188, 227, 0.06) 50%, transparent 85%)",
         }}
       />
 
@@ -34,13 +34,13 @@ export function ProfileOceanicBackground() {
       >
         <defs>
           <linearGradient id={gradientId1} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#a9c8c0" stopOpacity="0.3" />
+            <stop offset="0%" stopColor="var(--kurage-accent)" stopOpacity="0.3" />
             <stop offset="50%" stopColor="#92bce3" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="#a9c8c0" stopOpacity="0" />
+            <stop offset="100%" stopColor="var(--kurage-accent)" stopOpacity="0" />
           </linearGradient>
           <linearGradient id={gradientId2} x1="100%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#92bce3" stopOpacity="0.25" />
-            <stop offset="60%" stopColor="#a9c8c0" stopOpacity="0.1" />
+            <stop offset="60%" stopColor="var(--kurage-accent)" stopOpacity="0.1" />
             <stop offset="100%" stopColor="#92bce3" stopOpacity="0" />
           </linearGradient>
         </defs>
@@ -108,7 +108,7 @@ export function ProfileOceanicBackground() {
         className="absolute top-[4%] left-[-4%] h-[520px] w-[580px] mix-blend-screen blur-3xl opacity-40"
         style={{
           background:
-            "radial-gradient(circle, rgba(169, 200, 192, 0.3) 0%, rgba(146, 188, 227, 0.1) 50%, transparent 70%)",
+            "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.3) 0%, rgba(146, 188, 227, 0.1) 50%, transparent 70%)",
         }}
       />
 
@@ -124,7 +124,7 @@ export function ProfileOceanicBackground() {
         className="absolute top-[8%] right-[-4%] h-[500px] w-[560px] mix-blend-screen blur-3xl opacity-35"
         style={{
           background:
-            "radial-gradient(circle, rgba(146, 188, 227, 0.3) 0%, rgba(169, 200, 192, 0.1) 50%, transparent 70%)",
+            "radial-gradient(circle, rgba(146, 188, 227, 0.3) 0%, rgba(var(--kurage-accent-rgb),0.1) 50%, transparent 70%)",
         }}
       />
 
@@ -138,7 +138,7 @@ export function ProfileOceanicBackground() {
         className="absolute top-[18%] left-1/2 -translate-x-1/2 h-[380px] w-[520px] rounded-full blur-3xl mix-blend-screen opacity-25 pointer-events-none"
         style={{
           background:
-            "radial-gradient(ellipse at center, rgba(169, 200, 192, 0.25) 0%, rgba(146, 188, 227, 0.08) 55%, transparent 75%)",
+            "radial-gradient(ellipse at center, rgba(var(--kurage-accent-rgb),0.25) 0%, rgba(146, 188, 227, 0.08) 55%, transparent 75%)",
         }}
       />
 
@@ -155,13 +155,13 @@ export function ProfileOceanicBackground() {
         ].map((pt, i) => (
           <motion.div
             key={i}
-            className="absolute rounded-full bg-[#a9c8c0] mix-blend-screen"
+            className="absolute rounded-full bg-[var(--kurage-accent)] mix-blend-screen"
             style={{
               top: pt.top,
               left: pt.left,
               width: pt.size,
               height: pt.size,
-              boxShadow: "0 0 10px rgba(169, 200, 192, 0.9), 0 0 20px rgba(146, 188, 227, 0.6)",
+              boxShadow: "0 0 10px rgba(var(--kurage-accent-rgb),0.9), 0 0 20px rgba(146, 188, 227, 0.6)",
             }}
             animate={{
               y: [-12, -40, -12],

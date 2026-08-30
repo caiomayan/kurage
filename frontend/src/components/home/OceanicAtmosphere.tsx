@@ -17,7 +17,7 @@ export function OceanicAtmosphere() {
         className="absolute -left-32 top-10 h-[850px] w-[850px] rounded-full mix-blend-screen opacity-30 blur-3xl"
         style={{
           willChange: "transform, opacity",
-          background: "radial-gradient(circle, rgba(169, 200, 192, 0.18) 0%, rgba(146, 188, 227, 0.08) 40%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.18) 0%, rgba(146, 188, 227, 0.08) 40%, transparent 70%)",
         }}
       />
 
@@ -31,7 +31,7 @@ export function OceanicAtmosphere() {
         className="absolute -right-32 top-[35%] h-[900px] w-[900px] rounded-full mix-blend-screen opacity-25 blur-3xl"
         style={{
           willChange: "transform, opacity",
-          background: "radial-gradient(circle, rgba(146, 188, 227, 0.16) 0%, rgba(169, 200, 192, 0.06) 45%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(146, 188, 227, 0.16) 0%, rgba(var(--kurage-accent-rgb),0.06) 45%, transparent 70%)",
         }}
       />
 
@@ -44,7 +44,7 @@ export function OceanicAtmosphere() {
         className="absolute left-[20%] bottom-[10%] h-[800px] w-[800px] rounded-full mix-blend-screen opacity-20 blur-3xl"
         style={{
           willChange: "transform, opacity",
-          background: "radial-gradient(circle, rgba(169, 200, 192, 0.15) 0%, transparent 65%)",
+          background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.15) 0%, transparent 65%)",
         }}
       />
 
@@ -60,7 +60,7 @@ export function OceanicAtmosphere() {
         transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
         className="absolute left-[15%] top-[20%] h-48 w-48 rounded-full blur-2xl"
         style={{
-          background: "radial-gradient(circle, rgba(169, 200, 192, 0.35) 0%, rgba(146, 188, 227, 0.1) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.35) 0%, rgba(146, 188, 227, 0.1) 50%, transparent 70%)",
         }}
       />
 
@@ -75,7 +75,7 @@ export function OceanicAtmosphere() {
         transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 2 }}
         className="absolute right-[22%] top-[45%] h-56 w-56 rounded-full blur-2xl"
         style={{
-          background: "radial-gradient(circle, rgba(146, 188, 227, 0.3) 0%, rgba(169, 200, 192, 0.1) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(146, 188, 227, 0.3) 0%, rgba(var(--kurage-accent-rgb),0.1) 50%, transparent 70%)",
         }}
       />
 
@@ -90,7 +90,7 @@ export function OceanicAtmosphere() {
         transition={{ duration: 16, repeat: Infinity, ease: "easeInOut", delay: 5 }}
         className="absolute left-[30%] top-[70%] h-64 w-64 rounded-full blur-3xl"
         style={{
-          background: "radial-gradient(circle, rgba(169, 200, 192, 0.3) 0%, rgba(146, 188, 227, 0.12) 45%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(var(--kurage-accent-rgb),0.3) 0%, rgba(146, 188, 227, 0.12) 45%, transparent 70%)",
         }}
       />
 
@@ -103,7 +103,7 @@ export function OceanicAtmosphere() {
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
         className="absolute left-1/2 top-[12%] -translate-x-1/2 h-[350px] w-full max-w-[1000px] rounded-full blur-3xl mix-blend-screen"
         style={{
-          background: "radial-gradient(ellipse at center, rgba(169, 200, 192, 0.2) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse at center, rgba(var(--kurage-accent-rgb),0.2) 0%, transparent 70%)",
         }}
       />
 
@@ -114,7 +114,7 @@ export function OceanicAtmosphere() {
       >
         <defs>
           <pattern id="oceanic-grid" width="80" height="80" patternUnits="userSpaceOnUse">
-            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(169,200,192,0.6)" strokeWidth="0.5" />
+            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(var(--kurage-accent-rgb),0.6)" strokeWidth="0.5" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill="url(#oceanic-grid)" />

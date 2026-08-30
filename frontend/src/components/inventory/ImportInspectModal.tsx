@@ -1,17 +1,16 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useMemo } from "react";
+import { motion } from "framer-motion";
 import {
   PiX,
   PiDownloadSimple,
-  PiSparkle,
   PiCheck,
   PiWarningCircle,
   PiPencilSimple,
 } from "react-icons/pi";
 import { CS2Economy, CS2BaseInventoryItem, CS2EconomyItem } from "@ianlucas/cs2-lib";
-import { parseInspectLink, isCommandInspect, isSteamInspectLink } from "@ianlucas/cs2-lib-inspect";
+import { parseInspectLink } from "@ianlucas/cs2-lib-inspect";
 import { useKurageInventory } from "@/lib/inventory/inventory-context";
 import { RARITY_COLORS, getWearName } from "@/lib/inventory/economy";
 
@@ -28,46 +27,45 @@ export function ImportInspectModal({
 }: ImportInspectModalProps) {
   const { craft } = useKurageInventory();
   const [inputLink, setInputLink] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  // Parse inspect link
-  const parsedItemData = useMemo<{ baseItem: CS2BaseInventoryItem; economyItem: CS2EconomyItem } | null>(() => {
+  const parseResult = useMemo<{
+    data: { baseItem: CS2BaseInventoryItem; economyItem: CS2EconomyItem } | null;
+    error: string | null;
+  }>(() => {
     const raw = inputLink.trim();
-    if (!raw) {
-      setError(null);
-      return null;
-    }
+    if (!raw) return { data: null, error: null };
 
     try {
       const baseItem = parseInspectLink(CS2Economy, raw);
       if (!baseItem || !baseItem.id) {
-        setError("Link ou comando de inspeção inválido.");
-        return null;
+        return { data: null, error: "Link ou comando de inspeção inválido." };
       }
       const economyItem = CS2Economy.getById(baseItem.id);
       if (!economyItem) {
-        setError("Item correspondente não encontrado na base de dados.");
-        return null;
+        return { data: null, error: "Item correspondente não encontrado na base de dados." };
       }
-      setError(null);
-      return { baseItem, economyItem };
-    } catch (err) {
-      setError("Formato não reconhecido. Use !i <código> ou steam://rungame/730/...");
-      return null;
+      return { data: { baseItem, economyItem }, error: null };
+    } catch {
+      return {
+        data: null,
+        error: "Formato não reconhecido. Use um comando de inspeção ou link da Steam.",
+      };
     }
   }, [inputLink]);
+  const parsedItemData = parseResult.data;
+  const error = parseResult.error;
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!parsedItemData) return;
     const { baseItem, economyItem } = parsedItemData;
-    craft(economyItem, {
+    const saved = await craft(economyItem, {
       wear: baseItem.wear,
       seed: baseItem.seed,
       stattrak: baseItem.statTrak !== undefined,
       nameTag: baseItem.nameTag,
-      stickers: baseItem.stickers as any,
-      keychains: baseItem.keychains as any,
+      stickers: baseItem.stickers,
+      keychains: baseItem.keychains,
     });
+    if (!saved) return;
     setInputLink("");
     onClose();
   };
@@ -103,12 +101,12 @@ export function ImportInspectModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-xl max-h-[90vh] rounded-[16px] bg-[#070b0e] border border-white/[0.1] shadow-[0_25px_80px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col"
+        className="relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[16px] border border-white/[0.1] bg-[#050708]"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/[0.08] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <PiDownloadSimple className="w-5 h-5 text-[#a9c8c0]" />
+            <PiDownloadSimple className="w-5 h-5 text-[var(--kurage-accent)]" />
             <h2 className="font-display text-[18px] font-bold text-white tracking-tight">
               Importar Skin via Link ou Comando CS2
             </h2>
@@ -135,7 +133,7 @@ export function ImportInspectModal({
               value={inputLink}
               onChange={(e) => setInputLink(e.target.value)}
               placeholder="Ex: !i CSGO-..."
-              className="w-full p-3 rounded-[8px] bg-white/[0.04] border border-white/[0.08] text-[13px] font-mono text-white placeholder:text-stone-600 focus:outline-none focus:border-[#a9c8c0]/50 resize-none"
+              className="w-full p-3 rounded-[8px] bg-white/[0.04] border border-white/[0.08] text-[13px] font-mono text-white placeholder:text-stone-600 focus:outline-none focus:border-[var(--kurage-accent)]/50 resize-none"
               autoFocus
             />
 
@@ -176,13 +174,13 @@ export function ImportInspectModal({
                     {economyItem.rarityColor || "Padrão"}
                   </span>
                   {baseItem?.wear !== undefined && (
-                    <span className="text-[11px] font-mono text-[#a9c8c0] mt-0.5">
-                      Float: {baseItem.wear.toFixed(6)} ({getWearName(baseItem.wear)})
+                    <span className="text-[11px] font-mono text-[var(--kurage-accent)] mt-0.5">
+                      Desgaste: {baseItem.wear.toFixed(6)} · {getWearName(baseItem.wear)}
                     </span>
                   )}
                   {baseItem?.seed !== undefined && (
                     <span className="text-[11px] font-mono text-stone-400">
-                      Seed: #{baseItem.seed}
+                      Padrão: {baseItem.seed}
                     </span>
                   )}
                 </div>
@@ -207,7 +205,7 @@ export function ImportInspectModal({
                 onClick={handleOpenInCraft}
                 className="px-4 py-2 rounded-[6px] bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.1] text-white text-[13px] font-sans font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40"
               >
-                <PiPencilSimple className="w-3.5 h-3.5 text-[#a9c8c0]" />
+                <PiPencilSimple className="w-3.5 h-3.5 text-[var(--kurage-accent)]" />
                 <span>Abrir no Estúdio</span>
               </button>
             )}
@@ -216,7 +214,7 @@ export function ImportInspectModal({
               type="button"
               disabled={!parsedItemData}
               onClick={handleImport}
-              className="px-5 py-2 rounded-[6px] bg-white text-black text-[13px] font-sans font-semibold hover:bg-stone-200 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40 shadow-md"
+              className="px-5 py-2 rounded-[6px] bg-white text-black text-[13px] font-sans font-semibold hover:bg-stone-200 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40"
             >
               <PiCheck className="w-4 h-4" />
               <span>Importar para Inventário</span>

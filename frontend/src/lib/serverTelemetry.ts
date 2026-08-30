@@ -2,6 +2,7 @@ import type { PlayerLiveStats } from "@/types/server";
 
 export type ServerPlayerApiRow = {
   kurageId?: number | null;
+  isKurageMember?: boolean | null;
   steamId64?: string | null;
   username?: string | null;
   avatarUrl?: string | null;
@@ -29,17 +30,19 @@ export function normalizeServerPlayer(
         : 0;
 
   return {
-    kurageId: Number(row.kurageId ?? 0),
-    username: row.username ?? "Player",
+    kurageId: row.kurageId == null ? undefined : Number(row.kurageId),
+    steamId64: row.steamId64 ?? undefined,
+    isKurageMember: Boolean(row.isKurageMember && row.kurageId != null),
+    username: row.username?.trim() || "Jogador não vinculado",
     avatarUrl: row.avatarUrl ?? "",
     isVerifiedPro: Boolean(row.isVerifiedPro),
-    kurageLevel: Number(row.kurageLevel ?? 0),
+    kurageLevel: row.kurageLevel == null ? undefined : Number(row.kurageLevel),
     faceitLevel: row.faceitLevel ?? undefined,
     kills,
     deaths,
     kdRatio,
     ping: Number(row.ping ?? 0),
-    isAlive: row.isAlive ?? true,
+    isAlive: row.isAlive ?? undefined,
   };
 }
 

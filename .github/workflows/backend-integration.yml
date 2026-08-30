@@ -1,0 +1,162 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "infra/deploy/**"
+      - ".github/workflows/backend-integration.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "infra/deploy/**"
+      - ".github/workflows/backend-integration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Verify Docker engine
+        run: docker info
+      - name: Unit and containerized integration tests
+        run: ./mvnw --batch-mode --no-transfer-progress verify -Pintegration
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: |
+            backend/target/surefire-reports
+            backend/target/failsafe-reports
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish immutable backend image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.reference }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve lowercase image name
+        id: image-name
+        shell: bash
+        run: echo "value=ghcr.io/${GITHUB_REPOSITORY,,}/backend" >> "${GITHUB_OUTPUT}"
+      - name: Build and publish ARM64 and AMD64 image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          platforms: linux/arm64,linux/amd64
+          push: true
+          tags: |
+            ${{ steps.image-name.outputs.value }}:alpha
+            ${{ steps.image-name.outputs.value }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+      - name: Pin deploy reference to the published digest
+        id: image
+        shell: bash
+        run: echo "reference=${{ steps.image-name.outputs.value }}@${{ steps.build.outputs.digest }}" >> "${GITHUB_OUTPUT}"
+
+  deploy:
+    name: Deploy backend to OCI alpha
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: alpha-backend
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure verified SSH transport
+        shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/kurage_deploy"
+          printf '%s\n' "${DEPLOY_SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/kurage_deploy" "${HOME}/.ssh/known_hosts"
+      - name: Synchronize non-secret deployment files
+        shell: bash
+        env:
+          OCI_HOST: ${{ vars.OCI_HOST }}
+        run: |
+          ssh -i "${HOME}/.ssh/kurage_deploy" "kurage@${OCI_HOST}" "install -d -m 0750 /opt/kurage/backend/incoming"
+          scp -i "${HOME}/.ssh/kurage_deploy" \
+            backend/docker-compose.yml \
+            backend/Caddyfile \
+            infra/deploy/deploy-backend.sh \
+            "kurage@${OCI_HOST}:/opt/kurage/backend/incoming/"
+      - name: Install production environment atomically
+        shell: bash
+        env:
+          OCI_HOST: ${{ vars.OCI_HOST }}
+          BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
+        run: |
+          printf '%s' "${BACKEND_ENV_FILE}" | base64 -w 0 | \
+            ssh -i "${HOME}/.ssh/kurage_deploy" "kurage@${OCI_HOST}" \
+              "umask 077; base64 -d > /opt/kurage/backend/incoming/backend.env.next && mv /opt/kurage/backend/incoming/backend.env.next /opt/kurage/backend/incoming/backend.env"
+      - name: Pull from GHCR with the short-lived workflow token
+        shell: bash
+        env:
+          OCI_HOST: ${{ vars.OCI_HOST }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "${GHCR_TOKEN}" | \
+            ssh -i "${HOME}/.ssh/kurage_deploy" "kurage@${OCI_HOST}" \
+              "docker login ghcr.io --username '${GITHUB_ACTOR}' --password-stdin"
+      - name: Deploy with health gate and automatic rollback
+        shell: bash
+        env:
+          OCI_HOST: ${{ vars.OCI_HOST }}
+          IMAGE_REFERENCE: ${{ needs.publish.outputs.image }}
+        run: |
+          ssh -i "${HOME}/.ssh/kurage_deploy" "kurage@${OCI_HOST}" \
+            "chmod 0750 /opt/kurage/backend/incoming/deploy-backend.sh && /opt/kurage/backend/incoming/deploy-backend.sh '${IMAGE_REFERENCE}'"
+      - name: Verify public API path
+        if: vars.API_HEALTH_URL != ''
+        shell: bash
+        env:
+          API_HEALTH_URL: ${{ vars.API_HEALTH_URL }}
+        run: curl --fail --show-error --silent --retry 5 --retry-delay 5 "${API_HEALTH_URL}"
+      - name: Remove temporary registry credential
+        if: always()
+        shell: bash
+        env:
+          OCI_HOST: ${{ vars.OCI_HOST }}
+        run: ssh -i "${HOME}/.ssh/kurage_deploy" "kurage@${OCI_HOST}" "docker logout ghcr.io >/dev/null 2>&1 || true"

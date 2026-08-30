@@ -1,6 +1,6 @@
 export type UserRole = "USER" | "ADMIN" | "OWNER";
 
-export type SubscriptionTier = "FREE" | "PLUS" | "PRO" | "MAX";
+export type SubscriptionTier = "FREE" | "MARE";
 
 export type InGameFunction =
   | "IGL"
@@ -43,6 +43,8 @@ export interface PlayerStats {
   roundsPlayed: number;
   matchesPlayed: number;
   matchesWon: number;
+  kdRatio?: number;
+  winRate?: number;
   totalDamage: number;
   lastMatchAt?: string | null;
 }
@@ -56,40 +58,35 @@ export interface UserWithStats extends User {
 
 const TIER_ORDER: Record<SubscriptionTier, number> = {
   FREE: 0,
-  PLUS: 1,
-  PRO: 2,
-  MAX: 3,
+  MARE: 1,
 };
 
 export type SubscriptionFeature =
   | "PROFILE_VISITORS"
-  | "PLUS_BADGE"
+  | "MARE_BADGE"
   | "ADVANCED_STATS"
   | "RANKING_FILTERS"
-  | "PRO_BADGE"
-  | "MAX_BADGE"
   | "SERVER_PRIORITY"
-  | "PROFILE_HIGHLIGHT";
+  | "PROFILE_HIGHLIGHT"
+  | "EARLY_ACCESS";
 
 export function hasSubscriptionFeature(
   tier: SubscriptionTier | null | undefined,
   feature: SubscriptionFeature
 ): boolean {
   if (!tier) return false;
-  const rank = TIER_ORDER[tier] ?? 0;
+  const rank = TIER_ORDER[tier as SubscriptionTier] ?? 0;
+  if (rank < TIER_ORDER.MARE) return false;
 
   switch (feature) {
     case "PROFILE_VISITORS":
-    case "PLUS_BADGE":
-      return rank >= TIER_ORDER.PLUS;
+    case "MARE_BADGE":
     case "ADVANCED_STATS":
     case "RANKING_FILTERS":
-    case "PRO_BADGE":
-      return rank >= TIER_ORDER.PRO;
-    case "MAX_BADGE":
     case "SERVER_PRIORITY":
     case "PROFILE_HIGHLIGHT":
-      return rank >= TIER_ORDER.MAX;
+    case "EARLY_ACCESS":
+      return true;
     default:
       return false;
   }

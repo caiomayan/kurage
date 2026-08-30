@@ -1,5 +1,40 @@
 import { NextResponse } from "next/server";
 
+interface SteamAsset {
+  assetid: string;
+  classid: string;
+  instanceid?: string;
+}
+
+interface SteamTag {
+  category?: string;
+  category_name?: string;
+  localized_tag_name?: string;
+  name?: string;
+  color?: string;
+}
+
+interface SteamDescription {
+  classid: string;
+  instanceid?: string;
+  market_hash_name?: string;
+  name?: string;
+  icon_url?: string;
+  tags?: SteamTag[];
+}
+
+interface SteamInventoryResponse {
+  assets?: SteamAsset[];
+  descriptions?: SteamDescription[];
+}
+
+function asSteamInventoryResponse(value: unknown): SteamInventoryResponse | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { assets?: unknown; descriptions?: unknown };
+  if (!Array.isArray(candidate.assets) || !Array.isArray(candidate.descriptions)) return null;
+  return candidate as SteamInventoryResponse;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ steamId64: string }> }
@@ -28,7 +63,7 @@ export async function GET(
     if (response.ok && contentType.includes("application/json")) {
       const rawText = await response.text();
       if (!rawText.trim().startsWith("<")) {
-        const data = JSON.parse(rawText);
+        const data: unknown = JSON.parse(rawText);
         if (Array.isArray(data) || (data && typeof data === "object")) {
           return NextResponse.json(data);
         }
@@ -55,26 +90,26 @@ export async function GET(
     if (steamRes.ok && steamContentType.includes("application/json")) {
       const steamText = await steamRes.text();
       if (!steamText.trim().startsWith("<")) {
-        const steamData = JSON.parse(steamText);
-        if (steamData && steamData.assets && steamData.descriptions) {
-          const descMap = new Map<string, any>();
+        const steamData = asSteamInventoryResponse(JSON.parse(steamText));
+        if (steamData?.assets && steamData.descriptions) {
+          const descMap = new Map<string, SteamDescription>();
           for (const desc of steamData.descriptions) {
             const key = `${desc.classid}_${desc.instanceid || "0"}`;
             descMap.set(key, desc);
           }
 
-          const items = (steamData.assets as any[]).map((asset) => {
+          const items = steamData.assets.map((asset) => {
             const key = `${asset.classid}_${asset.instanceid || "0"}`;
-            const desc = descMap.get(key) || {};
-            const rarityTag = (desc.tags || []).find(
-              (t: any) => t.category === "Rarity" || t.category_name === "Raridade"
+            const desc = descMap.get(key);
+            const rarityTag = (desc?.tags ?? []).find(
+              (tag) => tag.category === "Rarity" || tag.category_name === "Raridade"
             );
-            const isStatTrak = (desc.market_hash_name || desc.name || "").includes("StatTrak™");
+            const isStatTrak = (desc?.market_hash_name || desc?.name || "").includes("StatTrak™");
 
             return {
               id: asset.assetid,
-              name: desc.market_hash_name || desc.name || "Item CS2",
-              icon_url: desc.icon_url,
+              name: desc?.market_hash_name || desc?.name || "Item CS2",
+              icon_url: desc?.icon_url,
               rarity: rarityTag
                 ? {
                     name: rarityTag.localized_tag_name || rarityTag.name,
@@ -100,6 +135,8 @@ export async function GET(
     console.warn("Steam community inventory fetch error:", steamErr);
   }
 
-  // Graceful empty fallback so UI renders empty/private state without 500
-  return NextResponse.json([], { status: 200 });
+  return NextResponse.json(
+    { error: "inventory_upstream_unavailable" },
+    { status: 503 },
+  );
 }

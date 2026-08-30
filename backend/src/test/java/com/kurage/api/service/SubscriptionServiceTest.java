@@ -28,26 +28,27 @@ class SubscriptionServiceTest {
     @Test
     void testActiveSubscriptionTier() {
         User user = User.builder()
-                .subscriptionTier(SubscriptionTier.PRO)
+                .subscriptionTier(SubscriptionTier.MARE)
                 .subscriptionExpiresAt(OffsetDateTime.now().plusDays(30))
                 .build();
 
-        assertEquals(SubscriptionTier.PRO, subscriptionService.getTier(user));
+        assertEquals(SubscriptionTier.MARE, subscriptionService.getTier(user));
         assertTrue(subscriptionService.isVip(user));
         assertTrue(subscriptionService.hasFeature(user, "ADVANCED_STATS"));
         assertTrue(subscriptionService.hasFeature(user, "PROFILE_VISITORS"));
-        assertFalse(subscriptionService.hasFeature(user, "MAX_BADGE"));
+        assertTrue(subscriptionService.hasFeature(user, "MARE_BADGE"));
+        assertTrue(subscriptionService.hasFeature(user, "SERVER_PRIORITY"));
     }
 
     @Test
     void testExpiredSubscriptionFallsBackToFree() {
         User user = User.builder()
-                .subscriptionTier(SubscriptionTier.MAX)
+                .subscriptionTier(SubscriptionTier.MARE)
                 .subscriptionExpiresAt(OffsetDateTime.now().minusDays(1))
                 .build();
 
         assertEquals(SubscriptionTier.FREE, subscriptionService.getTier(user));
         assertFalse(subscriptionService.isVip(user));
-        assertFalse(subscriptionService.hasFeature(user, "MAX_BADGE"));
+        assertFalse(subscriptionService.hasFeature(user, "MARE_BADGE"));
     }
 }

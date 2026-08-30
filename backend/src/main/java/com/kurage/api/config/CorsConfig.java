@@ -15,13 +15,14 @@ import java.util.Set;
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    private static final String FRONTEND_APEX_HOST = "kurage.caiomayan.com";
-    private static final String FRONTEND_WWW_HOST = "www.kurage.caiomayan.com";
-
     private final String frontendUrl;
+    private final String additionalOrigins;
 
-    public CorsConfig(@Value("${frontend.url:http://localhost:3000}") String frontendUrl) {
+    public CorsConfig(
+            @Value("${frontend.url:http://localhost:3000}") String frontendUrl,
+            @Value("${frontend.additional-origins:}") String additionalOrigins) {
         this.frontendUrl = frontendUrl;
+        this.additionalOrigins = additionalOrigins;
     }
 
     @Override
@@ -35,48 +36,54 @@ public class CorsConfig implements WebMvcConfigurer {
 
     Set<String> allowedOrigins() {
         Set<String> origins = new LinkedHashSet<>();
-        origins.add(frontendUrl);
-
-        String alternateOrigin = alternateCaiomayanOrigin(frontendUrl);
-        if (alternateOrigin != null) {
-            origins.add(alternateOrigin);
-        }
+        origins.add(normalizeOrigin(frontendUrl));
+        additionalOrigins.lines()
+                .flatMap(line -> java.util.Arrays.stream(line.split(",")))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .map(CorsConfig::normalizeOrigin)
+                .forEach(origins::add);
 
         return origins;
     }
 
-    private static String alternateCaiomayanOrigin(String configuredOrigin) {
+    public boolean isAllowedOrigin(String origin) {
+        if (origin == null) {
+            return false;
+        }
+        try {
+            return allowedOrigins().contains(normalizeOrigin(origin));
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private static String normalizeOrigin(String configuredOrigin) {
         try {
             URI uri = new URI(configuredOrigin);
             String scheme = uri.getScheme();
             String host = uri.getHost();
 
             if (scheme == null || host == null
-                    || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
-                return null;
-            }
-
-            String normalizedHost = host.toLowerCase(Locale.ROOT);
-            String alternateHost;
-            if (FRONTEND_APEX_HOST.equals(normalizedHost)) {
-                alternateHost = FRONTEND_WWW_HOST;
-            } else if (FRONTEND_WWW_HOST.equals(normalizedHost)) {
-                alternateHost = FRONTEND_APEX_HOST;
-            } else {
-                return null;
+                    || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))
+                    || uri.getUserInfo() != null
+                    || (uri.getPath() != null && !uri.getPath().isBlank() && !"/".equals(uri.getPath()))
+                    || uri.getQuery() != null
+                    || uri.getFragment() != null) {
+                throw new IllegalArgumentException("CORS origin must be an absolute HTTP(S) origin: " + configuredOrigin);
             }
 
             return new URI(
                     scheme.toLowerCase(Locale.ROOT),
                     null,
-                    alternateHost,
+                    host.toLowerCase(Locale.ROOT),
                     uri.getPort(),
                     null,
                     null,
                     null
             ).toString();
         } catch (URISyntaxException exception) {
-            return null;
+            throw new IllegalArgumentException("Invalid CORS origin: " + configuredOrigin, exception);
         }
     }
 }

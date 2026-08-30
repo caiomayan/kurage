@@ -9,6 +9,7 @@ import { footerStore } from "@/lib/footer-store";
 export default function NotFound() {
 
   useEffect(() => {
+    document.title = "Kurage · Página não encontrada";
     footerStore.set(true);
     return () => footerStore.set(false);
   }, []);
@@ -35,7 +36,7 @@ export default function NotFound() {
         </h1>
 
         <p className="mt-4 text-[16px] leading-relaxed text-body">
-          O recurso que você tentou acessar não existe, foi movido ou está temporariamente indisponível.
+          O recurso que você tentou acessar não existe ou foi movido para outro endereço.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

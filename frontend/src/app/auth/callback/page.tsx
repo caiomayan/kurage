@@ -18,6 +18,7 @@ export default function AuthCallbackPage() {
   const hasRun = useRef(false);
 
   useEffect(() => {
+    document.title = "Kurage · Entrando com a Steam";
     if (hasRun.current) return;
     hasRun.current = true;
 
@@ -33,8 +34,11 @@ export default function AuthCallbackPage() {
         }
 
         // Get the original redirect destination saved before Steam login
-        const redirectTo = sessionStorage.getItem(REDIRECT_STORAGE_KEY) || "/";
+        const storedRedirect = sessionStorage.getItem(REDIRECT_STORAGE_KEY);
         sessionStorage.removeItem(REDIRECT_STORAGE_KEY);
+        const redirectTo = storedRedirect?.startsWith("/") && !storedRedirect.startsWith("//")
+          ? storedRedirect
+          : "/";
 
         router.replace(redirectTo);
       } catch {

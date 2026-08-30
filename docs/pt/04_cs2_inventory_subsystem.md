@@ -14,31 +14,28 @@ O subsistema de inventário permite a visualização ultra-rápida e rica em det
 
 ---
 
-## 🔄 Fluxo de Dados e Integração com cstrike.app
+## 🔄 Fluxo de Dados Atual
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Player as Jogador
-    participant NextRoute as Next.js API Proxy (/api/cstrike/inventory/:steamId64)
-    participant CStrikeAPI as cstrike.app API
+    participant Web as Frontend Next.js
     participant SpringAPI as Backend Spring (/inventory/:steamId64)
     participant Postgres as PostgreSQL (user_inventories JSONB)
+    participant Equipped as Next.js (/api/equipped/v5/:steamId64)
+    participant Plugin as Inventory Simulator
 
-    Player->>NextRoute: Acessa aba Inventário do perfil
-    NextRoute->>CStrikeAPI: Solicita dados de inventário do SteamID64
-    alt cstrike.app responde 200 OK
-        CStrikeAPI-->>NextRoute: Retorna lista de itens detalhados
-        NextRoute->>SpringAPI: PUT /inventory/:steamId64 (Salva cache persistente)
-        SpringAPI->>Postgres: UPSERT em user_inventories
-        NextRoute-->>Player: Renderiza grid de skins com float, rarity e adesivos
-    else cstrike.app indisponível ou rate-limited
-        NextRoute->>SpringAPI: GET /inventory/:steamId64
-        SpringAPI->>Postgres: SELECT items FROM user_inventories
-        Postgres-->>SpringAPI: Retorna snapshot persistido
-        SpringAPI-->>NextRoute: Retorna último inventário salvo
-        NextRoute-->>Player: Renderiza dados salvos com aviso de cache
-    end
+    Player->>Web: Acessa inventário ou perfil
+    Web->>SpringAPI: GET /inventory/:steamId64
+    SpringAPI->>Postgres: SELECT items
+    Postgres-->>SpringAPI: Inventário persistido
+    SpringAPI-->>Web: JSON real ou erro HTTP
+    Web-->>Player: Itens, vazio confirmado ou estado de falha
+    Plugin->>Equipped: Solicita loadout equipado
+    Equipped->>SpringAPI: GET /inventory/:steamId64
+    SpringAPI-->>Equipped: Inventário persistido
+    Equipped-->>Plugin: Loadout convertido; falhas mantêm status não-2xx
 ```
 
 ---
@@ -55,4 +52,5 @@ CREATE TABLE user_inventories (
 ```
 
 - Os itens são persistidos como JSONB contendo metadados essenciais (nome do item, skin, desgaste/float, stickers aplicados, raridade e imagem).
-- Permite renderização offline ou em fallback caso serviços externos fiquem fora do ar.
+- Uma falha de upstream nunca é convertida em inventário vazio com HTTP 200; isso
+  evita que indisponibilidade seja interpretada como remoção legítima de itens.

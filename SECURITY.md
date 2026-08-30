@@ -2,9 +2,9 @@
 
 ## Português
 
-Kurage está em alfa técnica e não deve processar pagamentos nem dados reais de
-clientes até a conclusão dos bloqueadores P0 descritos em
-`docs/pt/08_auditoria_estado_atual.md`.
+Kurage está em alfa técnica fechada e não deve processar pagamentos até o gate
+comercial de `docs/pt/15_operacao_e_release.md`. Usuários reais só podem entrar
+após o gate específico da alfa, incluindo canal de privacidade e restore testado.
 
 Relate vulnerabilidades de forma privada ao proprietário do repositório pelo
 mesmo canal usado para conceder acesso ou por um *private security advisory* do
@@ -21,8 +21,9 @@ possível; prazos de correção dependem da gravidade e da validação técnica.
 
 ## English
 
-Kurage is a technical alpha and must not process payments or real customer data
-until the P0 blockers in `docs/en/08_current_state_audit.md` are complete.
+Kurage is a closed technical alpha and must not process payments before the
+commercial gate in `docs/en/15_operations_and_release.md`. Real users may enter
+only after its alpha gate, including a privacy channel and tested restore.
 
 Report vulnerabilities privately to the repository owner through the channel
 used to grant access, or through the Git provider's private security-advisory
@@ -36,4 +37,3 @@ social-engineering, or destructive testing.
 
 There is no paid bug-bounty program. Receipt will be acknowledged when possible;
 remediation timing depends on severity and technical validation.
-

@@ -8,10 +8,14 @@ import com.kurage.api.util.HashUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -25,6 +29,26 @@ public class RefreshTokenService {
     private static final String REDIS_GRACE_PREFIX = "refresh_grace:";
     private static final long TTL_DAYS = 30;
     private static final long GRACE_PERIOD_SECONDS = 10;
+    private static final long TTL_SECONDS = Duration.ofDays(TTL_DAYS).toSeconds();
+    private static final DefaultRedisScript<Long> CREATE_SCRIPT = new DefaultRedisScript<>("""
+            redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
+            redis.call('SADD', KEYS[2], ARGV[2])
+            redis.call('EXPIRE', KEYS[2], ARGV[3])
+            return 1
+            """, Long.class);
+    private static final DefaultRedisScript<Long> ROTATE_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+                return 0
+            end
+            if redis.call('EXISTS', KEYS[3]) == 0 then
+                return -1
+            end
+            redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[6])
+            redis.call('SADD', KEYS[3], ARGV[3])
+            redis.call('SET', KEYS[1], ARGV[4], 'KEEPTTL')
+            redis.call('SET', KEYS[4], ARGV[5], 'EX', ARGV[7])
+            return 1
+            """, Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -36,29 +60,25 @@ public class RefreshTokenService {
     private String createRefreshToken(String steamId64, String deviceId, String userAgent, String familyId) {
         String token = TokenGenerationUtils.generateRefreshToken();
         RefreshTokenSession session = new RefreshTokenSession(steamId64, deviceId, userAgent, familyId, null, null);
-        
-        saveSessionToRedis(token, session);
-        redisTemplate.opsForSet().add(REDIS_FAMILY_PREFIX + familyId, token);
-        redisTemplate.expire(REDIS_FAMILY_PREFIX + familyId, Duration.ofDays(TTL_DAYS));
-        
+        String tokenHash = HashUtils.sha256(token);
+        Long created = redisTemplate.execute(
+                CREATE_SCRIPT,
+                List.of(tokenKey(token), REDIS_FAMILY_PREFIX + familyId),
+                serialize(session),
+                tokenHash,
+                Long.toString(TTL_SECONDS)
+        );
+        if (!Long.valueOf(1L).equals(created)) {
+            throw new IllegalStateException("Could not persist refresh token session");
+        }
         return token;
     }
 
-    private void saveSessionToRedis(String token, RefreshTokenSession session) {
-        try {
-            String jsonValue = objectMapper.writeValueAsString(session);
-            redisTemplate.opsForValue().set(
-                    REDIS_KEY_PREFIX + token,
-                    jsonValue,
-                    Duration.ofDays(TTL_DAYS)
-            );
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Error serializing refresh token session", e);
-        }
-    }
-
     public RefreshTokenSession validateRefreshToken(String token) {
-        String jsonValue = redisTemplate.opsForValue().get(REDIS_KEY_PREFIX + token);
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        String jsonValue = redisTemplate.opsForValue().get(tokenKey(token));
         if (jsonValue == null) {
             return null;
         }
@@ -90,7 +110,7 @@ public class RefreshTokenService {
             return null;
         }
 
-        if (!session.deviceId().equals(deviceId)) {
+        if (!secureEquals(session.deviceId(), deviceId)) {
             log.warn("Device ID mismatch on rotation attempt for family {}", session.familyId());
             revokeTokenFamily(session.familyId());
             return null;
@@ -100,7 +120,7 @@ public class RefreshTokenService {
             long secondsSinceRotation = Instant.now().getEpochSecond() - session.rotatedAtEpochSecond();
             if (secondsSinceRotation <= GRACE_PERIOD_SECONDS) {
                 // Grace Period: buscar o novo token armazenado provisoriamente em texto puro
-                String graceNewToken = redisTemplate.opsForValue().get(REDIS_GRACE_PREFIX + oldToken);
+                String graceNewToken = redisTemplate.opsForValue().get(graceKey(oldToken));
                 if (graceNewToken != null) {
                     log.info("Concurrent refresh detected within grace period for family {}", session.familyId());
                     return graceNewToken;
@@ -113,9 +133,18 @@ public class RefreshTokenService {
             return null;
         }
 
-        // Fluxo Normal (Token não havia sido usado)
-        String newToken = createRefreshToken(session.userId(), session.deviceId(), session.userAgent(), session.familyId());
+        String oldSessionJson = serialize(session);
+
+        String newToken = TokenGenerationUtils.generateRefreshToken();
         String newTokenHash = HashUtils.sha256(newToken);
+        RefreshTokenSession newSession = new RefreshTokenSession(
+                session.userId(),
+                session.deviceId(),
+                session.userAgent(),
+                session.familyId(),
+                null,
+                null
+        );
 
         RefreshTokenSession updatedSession = new RefreshTokenSession(
                 session.userId(),
@@ -126,12 +155,34 @@ public class RefreshTokenService {
                 newTokenHash
         );
 
-        saveSessionToRedis(oldToken, updatedSession); // Atualiza antigo como usado
-        
-        // Salva o token novo por apenas 10s em texto puro para tolerar race conditions (Grace Period)
-        redisTemplate.opsForValue().set(REDIS_GRACE_PREFIX + oldToken, newToken, Duration.ofSeconds(GRACE_PERIOD_SECONDS));
+        Long rotated = redisTemplate.execute(
+                ROTATE_SCRIPT,
+                List.of(
+                        tokenKey(oldToken),
+                        tokenKey(newToken),
+                        REDIS_FAMILY_PREFIX + session.familyId(),
+                        graceKey(oldToken)
+                ),
+                oldSessionJson,
+                serialize(newSession),
+                newTokenHash,
+                serialize(updatedSession),
+                newToken,
+                Long.toString(TTL_SECONDS),
+                Long.toString(GRACE_PERIOD_SECONDS)
+        );
 
-        return newToken;
+        if (Long.valueOf(1L).equals(rotated)) {
+            return newToken;
+        }
+
+        // Another request won the compare-and-set. It can only receive the
+        // exact token published by the winner during the short grace window.
+        RefreshTokenSession currentSession = validateRefreshToken(oldToken);
+        if (currentSession != null && currentSession.rotatedAtEpochSecond() != null) {
+            return redisTemplate.opsForValue().get(graceKey(oldToken));
+        }
+        return null;
     }
 
     public void revokeRefreshToken(String token) {
@@ -145,11 +196,37 @@ public class RefreshTokenService {
         String familyKey = REDIS_FAMILY_PREFIX + familyId;
         Set<String> tokens = redisTemplate.opsForSet().members(familyKey);
         if (tokens != null) {
-            for (String t : tokens) {
-                redisTemplate.delete(REDIS_KEY_PREFIX + t);
-                redisTemplate.delete(REDIS_GRACE_PREFIX + t);
+            for (String tokenHash : tokens) {
+                redisTemplate.delete(REDIS_KEY_PREFIX + tokenHash);
+                redisTemplate.delete(REDIS_GRACE_PREFIX + tokenHash);
             }
         }
         redisTemplate.delete(familyKey);
+    }
+
+    private String serialize(RefreshTokenSession session) {
+        try {
+            return objectMapper.writeValueAsString(session);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Error serializing refresh token session", e);
+        }
+    }
+
+    private static String tokenKey(String token) {
+        return REDIS_KEY_PREFIX + HashUtils.sha256(token);
+    }
+
+    private static String graceKey(String token) {
+        return REDIS_GRACE_PREFIX + HashUtils.sha256(token);
+    }
+
+    private static boolean secureEquals(String left, String right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                left.getBytes(StandardCharsets.UTF_8),
+                right.getBytes(StandardCharsets.UTF_8)
+        );
     }
 }

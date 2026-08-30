@@ -6,6 +6,7 @@ import com.kurage.api.domain.GameServer;
 import com.kurage.api.dto.request.GameServerHeartbeatRequest;
 import com.kurage.api.dto.response.GameServerResponse;
 import com.kurage.api.repository.GameServerRepository;
+import com.kurage.api.util.HashUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -30,6 +31,8 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class GameServerServiceTest {
+
+    private static final String SERVER_API_KEY = "unit-test-game-server-key-with-32-bytes";
 
     @Mock
     private GameServerRepository gameServerRepository;
@@ -249,6 +252,7 @@ class GameServerServiceTest {
                     .currentMap("de_mirage")
                     .currentPlayers(2)
                     .maxPlayers(10)
+                    .apiKeyHash(HashUtils.sha256(SERVER_API_KEY))
                     .isOnline(false)
                     .build();
 
@@ -261,7 +265,7 @@ class GameServerServiceTest {
                     .maxPlayers(12)
                     .build();
 
-            GameServerResponse result = gameServerService.processHeartbeat(id, request);
+            GameServerResponse result = gameServerService.processAuthenticatedHeartbeat(id, SERVER_API_KEY, request);
 
             assertThat(result.isOnline()).isTrue();
             assertThat(result.currentMap()).isEqualTo("de_nuke");
@@ -285,9 +289,66 @@ class GameServerServiceTest {
                     .currentPlayers(9)
                     .build();
 
-            assertThatThrownBy(() -> gameServerService.processHeartbeat(id, request))
+            assertThatThrownBy(() -> gameServerService.processAuthenticatedHeartbeat(id, SERVER_API_KEY, request))
                     .isInstanceOf(ResponseStatusException.class)
                     .hasMessageContaining("404 NOT_FOUND");
+        }
+
+        @Test
+        @DisplayName("Deve rejeitar uma credencial que pertence a outro servidor")
+        void shouldRejectAnotherServersCredential() {
+            UUID id = UUID.randomUUID();
+            GameServer existing = GameServer.builder()
+                    .id(id)
+                    .name("Kurage Retakes #1")
+                    .hostname("br-retakes.kurage.gg")
+                    .port(27015)
+                    .gameMode(GameMode.RETAKE)
+                    .currentPlayers(0)
+                    .maxPlayers(10)
+                    .apiKeyHash(HashUtils.sha256(SERVER_API_KEY))
+                    .build();
+            when(gameServerRepository.findById(id)).thenReturn(Optional.of(existing));
+
+            GameServerHeartbeatRequest request = GameServerHeartbeatRequest.builder()
+                    .currentMap("de_nuke")
+                    .currentPlayers(9)
+                    .build();
+
+            assertThatThrownBy(() -> gameServerService.processAuthenticatedHeartbeat(
+                    id, "another-server-key-with-at-least-32-bytes", request))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("401 UNAUTHORIZED");
+
+            verify(gameServerRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Deve falhar fechado se o servidor ainda não recebeu credencial")
+        void shouldFailClosedWithoutProvisionedCredential() {
+            UUID id = UUID.randomUUID();
+            GameServer existing = GameServer.builder()
+                    .id(id)
+                    .name("Kurage Retakes #1")
+                    .hostname("br-retakes.kurage.gg")
+                    .port(27015)
+                    .gameMode(GameMode.RETAKE)
+                    .currentPlayers(0)
+                    .maxPlayers(10)
+                    .build();
+            when(gameServerRepository.findById(id)).thenReturn(Optional.of(existing));
+
+            GameServerHeartbeatRequest request = GameServerHeartbeatRequest.builder()
+                    .currentMap("de_nuke")
+                    .currentPlayers(9)
+                    .build();
+
+            assertThatThrownBy(() -> gameServerService.processAuthenticatedHeartbeat(
+                    id, SERVER_API_KEY, request))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("503 SERVICE_UNAVAILABLE");
+
+            verify(gameServerRepository, never()).save(any());
         }
     }
 

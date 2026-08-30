@@ -75,13 +75,13 @@ public class InventoryService {
     public JsonNode getInventoryBySteamId(String steamId64) {
         Optional<User> userOpt = userRepository.findBySteamId64(steamId64);
         if (userOpt.isEmpty()) {
-            return objectMapper.createObjectNode();
+            return emptyInventory();
         }
 
         return inventoryRepository.findByUserId(userOpt.get().getId())
                 .map(UserInventory::getItems)
-                .map(this::toApiJson)
-                .orElseGet(objectMapper::createObjectNode);
+                .map(this::toCanonicalApiInventory)
+                .orElseGet(this::emptyInventory);
     }
 
     @Transactional(readOnly = true)
@@ -105,7 +105,7 @@ public class InventoryService {
             return response;
         }
 
-        Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> fields = itemsNode.fields();
+        Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> fields = itemsNode.properties().iterator();
         int uidCounter = 0;
 
         while (fields.hasNext()) {
@@ -136,9 +136,14 @@ public class InventoryService {
                     .wear(wear)
                     .nametag(nametag)
                     .stattrak(statTrak)
+                    .stickers(toEquippedStickers(itemNode))
+                    .keychains(toEquippedKeychains(itemNode))
                     .build();
 
-            if ("melee".equalsIgnoreCase(type)) {
+            if ("musickit".equalsIgnoreCase(type)) {
+                // A music kit is a single global slot, not a CT/TR loadout item.
+                response.setMusicKit(dto);
+            } else if ("melee".equalsIgnoreCase(type)) {
                 if (equippedCT) response.getKnives().put("3", dto);
                 if (equippedT) response.getKnives().put("2", dto);
             } else if ("glove".equalsIgnoreCase(type)) {
@@ -156,20 +161,107 @@ public class InventoryService {
         return response;
     }
 
+    /**
+     * Converts Kurage's economy item IDs stored in PostgreSQL to the CS2 sticker
+     * kit identifiers required by Inventory Simulator's equipped v5 endpoint.
+     */
+    private List<EquippedStickerDto> toEquippedStickers(com.fasterxml.jackson.databind.JsonNode itemNode) {
+        com.fasterxml.jackson.databind.JsonNode stickersNode = itemNode.get("stickers");
+        if (stickersNode == null || !stickersNode.isObject()) {
+            return null;
+        }
+
+        List<EquippedStickerDto> stickers = new ArrayList<>();
+        Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> fields = stickersNode.properties().iterator();
+        while (fields.hasNext()) {
+            Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> entry = fields.next();
+            Byte slot = toSlot(entry.getKey());
+            com.fasterxml.jackson.databind.JsonNode stickerNode = entry.getValue();
+            ItemMeta meta = itemLookupMap.get(optionalInteger(stickerNode, "id"));
+
+            if (slot == null || meta == null || meta.getPaint() == null) {
+                continue;
+            }
+
+            stickers.add(EquippedStickerDto.builder()
+                    .slot(slot)
+                    .def(meta.getPaint())
+                    .schema(optionalInteger(stickerNode, "schema"))
+                    .wear(optionalFloat(stickerNode, "wear"))
+                    .rotation(optionalFloat(stickerNode, "rotation"))
+                    .x(optionalFloat(stickerNode, "x"))
+                    .y(optionalFloat(stickerNode, "y"))
+                    .build());
+        }
+
+        return stickers.isEmpty() ? null : stickers;
+    }
+
+    private List<EquippedKeychainDto> toEquippedKeychains(com.fasterxml.jackson.databind.JsonNode itemNode) {
+        com.fasterxml.jackson.databind.JsonNode keychainsNode = itemNode.get("keychains");
+        if (keychainsNode == null || !keychainsNode.isObject()) {
+            return null;
+        }
+
+        List<EquippedKeychainDto> keychains = new ArrayList<>();
+        Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> fields = keychainsNode.properties().iterator();
+        while (fields.hasNext()) {
+            Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> entry = fields.next();
+            Byte slot = toSlot(entry.getKey());
+            com.fasterxml.jackson.databind.JsonNode keychainNode = entry.getValue();
+            ItemMeta meta = itemLookupMap.get(optionalInteger(keychainNode, "id"));
+
+            if (slot == null || meta == null || meta.getPaint() == null) {
+                continue;
+            }
+
+            keychains.add(EquippedKeychainDto.builder()
+                    .slot(slot)
+                    .def(meta.getPaint())
+                    .seed(optionalInteger(keychainNode, "seed"))
+                    .sticker(optionalInteger(keychainNode, "sticker"))
+                    .x(optionalFloat(keychainNode, "x"))
+                    .y(optionalFloat(keychainNode, "y"))
+                    .z(optionalFloat(keychainNode, "z"))
+                    .build());
+        }
+
+        return keychains.isEmpty() ? null : keychains;
+    }
+
+    private Byte toSlot(String value) {
+        try {
+            int slot = Integer.parseInt(value);
+            return slot >= 0 && slot <= Byte.MAX_VALUE ? (byte) slot : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private Integer optionalInteger(com.fasterxml.jackson.databind.JsonNode node, String field) {
+        com.fasterxml.jackson.databind.JsonNode value = node.get(field);
+        return value != null && value.isIntegralNumber() ? value.intValue() : null;
+    }
+
+    private Float optionalFloat(com.fasterxml.jackson.databind.JsonNode node, String field) {
+        com.fasterxml.jackson.databind.JsonNode value = node.get(field);
+        return value != null && value.isNumber() ? value.floatValue() : null;
+    }
+
     @Transactional(readOnly = true)
     public JsonNode getInventoryByUser(User user) {
         if (user == null || user.getId() == null) {
-            return objectMapper.createObjectNode();
+            return emptyInventory();
         }
 
         return inventoryRepository.findByUserId(user.getId())
                 .map(UserInventory::getItems)
-                .map(this::toApiJson)
-                .orElseGet(objectMapper::createObjectNode);
+                .map(this::toCanonicalApiInventory)
+                .orElseGet(this::emptyInventory);
     }
 
     @Transactional
-    public void updateInventory(User user, JsonNode items) {
+    public JsonNode updateInventory(User user, JsonNode items) {
         if (user == null || user.getId() == null) {
             throw new IllegalArgumentException("Authenticated user must have a valid ID");
         }
@@ -180,9 +272,57 @@ public class InventoryService {
                         .userId(userId)
                         .build());
 
-        inventory.setItems(toPersistenceJson(items));
-        inventoryRepository.save(inventory);
+        JsonNode canonicalInventory = requireCanonicalInventory(items);
+        inventory.setItems(toPersistenceJson(canonicalInventory));
+        UserInventory persistedInventory = inventoryRepository.saveAndFlush(inventory);
         log.info("Inventory updated for user ID: {}", userId);
+        return toCanonicalApiInventory(persistedInventory.getItems());
+    }
+
+    /**
+     * The browser library requires this exact envelope even when the player has
+     * no custom items. Returning {} made a newly authenticated inventory fail
+     * validation until the first successful PUT happened to create the envelope.
+     */
+    private JsonNode emptyInventory() {
+        var inventory = objectMapper.createObjectNode();
+        inventory.set("items", objectMapper.createObjectNode());
+        inventory.put("version", 2);
+        return inventory;
+    }
+
+    private JsonNode toCanonicalApiInventory(com.fasterxml.jackson.databind.JsonNode persistedItems) {
+        JsonNode inventory = toApiJson(persistedItems);
+        if (!isCanonicalInventory(inventory)) {
+            log.warn("Ignoring malformed persisted inventory payload and returning an empty canonical inventory");
+            return emptyInventory();
+        }
+        return inventory;
+    }
+
+    private JsonNode requireCanonicalInventory(JsonNode inventory) {
+        if (!isCanonicalInventory(inventory)) {
+            throw new IllegalArgumentException("Inventory must contain an object 'items' and a numeric 'version'");
+        }
+        requireSingleMusicKit(inventory);
+        return inventory;
+    }
+
+    private void requireSingleMusicKit(JsonNode inventory) {
+        int musicKitCount = 0;
+        for (JsonNode itemNode : inventory.path("items")) {
+            ItemMeta meta = itemLookupMap.get(itemNode.path("id").asInt(-1));
+            if (meta != null && "musickit".equalsIgnoreCase(meta.getType()) && ++musicKitCount > 1) {
+                throw new IllegalArgumentException("Inventory supports only one music kit slot");
+            }
+        }
+    }
+
+    private boolean isCanonicalInventory(JsonNode inventory) {
+        return inventory != null
+                && inventory.isObject()
+                && inventory.path("items").isObject()
+                && inventory.path("version").isNumber();
     }
 
     private JsonNode toApiJson(com.fasterxml.jackson.databind.JsonNode items) {

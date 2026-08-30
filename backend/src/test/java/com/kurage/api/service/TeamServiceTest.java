@@ -209,15 +209,35 @@ class TeamServiceTest {
     @DisplayName("Should update team avatar when user is OWNER")
     void shouldUpdateAvatarWhenUserIsOwner() throws IOException {
         MultipartFile file = mock(MultipartFile.class);
+        sampleTeam.setLogoUrl("https://r2.kurage.com/team-logos/old.png");
         when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId())).thenReturn(Optional.of(ownerMember));
-        when(s3Service.uploadAvatar(file, sampleTeam.getId())).thenReturn("https://r2.kurage.com/avatar.jpg");
+        when(s3Service.uploadTeamLogo(file, sampleTeam.getId())).thenReturn("https://r2.kurage.com/avatar.jpg");
         when(teamRepository.save(any(Team.class))).thenReturn(sampleTeam);
 
         TeamResponse response = teamService.updateTeamAvatar(sampleTeam.getId(), ownerUser.getId(), file);
 
         assertNotNull(response);
         assertEquals("https://r2.kurage.com/avatar.jpg", sampleTeam.getLogoUrl());
+        verify(s3Service).deleteImageIfOwned("https://r2.kurage.com/team-logos/old.png");
+    }
+
+    @Test
+    @DisplayName("Should remove the newly uploaded logo when persistence fails")
+    void shouldCleanUpNewLogoWhenPersistenceFails() {
+        MultipartFile file = mock(MultipartFile.class);
+        String uploadedUrl = "https://r2.kurage.com/team-logos/new.png";
+        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId()))
+                .thenReturn(Optional.of(ownerMember));
+        when(s3Service.uploadTeamLogo(file, sampleTeam.getId())).thenReturn(uploadedUrl);
+        when(teamRepository.save(any(Team.class))).thenThrow(new IllegalStateException("database unavailable"));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> teamService.updateTeamAvatar(sampleTeam.getId(), ownerUser.getId(), file));
+
+        verify(s3Service).deleteImageIfOwned(uploadedUrl);
     }
 
     @Test
@@ -239,7 +259,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should send direct invite successfully by ADMIN or OWNER")
     void shouldSendInviteSuccessfully() {
-        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), adminUser.getId())).thenReturn(Optional.of(adminMember));
         when(userRepository.findBySteamId64(targetUser.getSteamId64())).thenReturn(Optional.of(targetUser));
         when(teamMemberRepository.existsByTeamIdAndUserId(sampleTeam.getId(), targetUser.getId())).thenReturn(false);
@@ -278,7 +298,7 @@ class TeamServiceTest {
                 .createdAt(Instant.now().minus(Duration.ofHours(25)))
                 .build();
 
-        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), adminUser.getId())).thenReturn(Optional.of(adminMember));
         when(userRepository.findBySteamId64(targetUser.getSteamId64())).thenReturn(Optional.of(targetUser));
         when(teamMemberRepository.existsByTeamIdAndUserId(sampleTeam.getId(), targetUser.getId())).thenReturn(false);
@@ -294,7 +314,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should throw 403 when non-manager sends direct invite")
     void shouldThrowWhenNonManagerSendsInvite() {
-        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), regularUser.getId())).thenReturn(Optional.of(regularMember));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
@@ -349,7 +369,7 @@ class TeamServiceTest {
                 .createdAt(Instant.now().minus(Duration.ofHours(1)))
                 .build();
 
-        when(teamInvitationRepository.findById(inviteId)).thenReturn(Optional.of(invitation));
+        when(teamInvitationRepository.findByIdWithLock(inviteId)).thenReturn(Optional.of(invitation));
         when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(userRepository.findById(targetUser.getId())).thenReturn(Optional.of(targetUser));
         when(teamMemberRepository.existsByTeamIdAndUserId(sampleTeam.getId(), targetUser.getId())).thenReturn(false);
@@ -382,7 +402,7 @@ class TeamServiceTest {
                 .createdAt(Instant.now().minus(Duration.ofHours(25)))
                 .build();
 
-        when(teamInvitationRepository.findById(inviteId)).thenReturn(Optional.of(invitation));
+        when(teamInvitationRepository.findByIdWithLock(inviteId)).thenReturn(Optional.of(invitation));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> teamService.acceptInvite(inviteId, targetUser.getId()));
@@ -406,7 +426,7 @@ class TeamServiceTest {
                 .createdAt(Instant.now().minus(Duration.ofHours(25)))
                 .build();
 
-        when(teamInvitationRepository.findById(inviteId)).thenReturn(Optional.of(invitation));
+        when(teamInvitationRepository.findByIdWithLock(inviteId)).thenReturn(Optional.of(invitation));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> teamService.declineInvite(inviteId, targetUser.getId()));
@@ -424,7 +444,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should create join request and notify managers")
     void shouldCreateJoinRequestSuccessfully() {
-        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(userRepository.findById(targetUser.getId())).thenReturn(Optional.of(targetUser));
         when(teamMemberRepository.existsByTeamIdAndUserId(sampleTeam.getId(), targetUser.getId())).thenReturn(false);
         when(teamJoinRequestRepository.existsByTeamIdAndRequesterIdAndStatus(sampleTeam.getId(), targetUser.getId(), JoinRequestStatus.PENDING)).thenReturn(false);
@@ -460,7 +480,7 @@ class TeamServiceTest {
                 .status(JoinRequestStatus.PENDING)
                 .build();
 
-        when(teamJoinRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
+        when(teamJoinRequestRepository.findByIdWithLock(requestId)).thenReturn(Optional.of(request));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), adminUser.getId())).thenReturn(Optional.of(adminMember));
         when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(userRepository.findById(targetUser.getId())).thenReturn(Optional.of(targetUser));
@@ -489,7 +509,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should generate invite link when active count is under limit")
     void shouldGenerateInviteLinkSuccessfully() {
-        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId())).thenReturn(Optional.of(ownerMember));
         when(teamInviteLinkRepository.countByTeamIdAndIsActiveTrueAndExpiresAtAfter(eq(sampleTeam.getId()), any(Instant.class))).thenReturn(2L);
         when(teamInviteLinkRepository.save(any(TeamInviteLink.class))).thenAnswer(invocation -> {
@@ -508,7 +528,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should throw 400 when active invite link limit (3) is reached")
     void shouldThrowWhenInviteLinkLimitReached() {
-        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId())).thenReturn(Optional.of(ownerMember));
         when(teamInviteLinkRepository.countByTeamIdAndIsActiveTrueAndExpiresAtAfter(eq(sampleTeam.getId()), any(Instant.class))).thenReturn(3L);
 
@@ -533,7 +553,7 @@ class TeamServiceTest {
                 .isActive(true)
                 .build();
 
-        when(teamInviteLinkRepository.findByTokenAndIsActiveTrue(token)).thenReturn(Optional.of(link));
+        when(teamInviteLinkRepository.findActiveByTokenWithLock(token)).thenReturn(Optional.of(link));
         when(userRepository.findById(targetUser.getId())).thenReturn(Optional.of(targetUser));
         when(teamMemberRepository.existsByTeamIdAndUserId(sampleTeam.getId(), targetUser.getId())).thenReturn(false);
         when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
@@ -562,6 +582,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should promote member to ADMIN by OWNER")
     void shouldPromoteToAdminByOwner() {
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId())).thenReturn(Optional.of(ownerMember));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), regularUser.getId())).thenReturn(Optional.of(regularMember));
         when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
@@ -574,6 +595,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should demote ADMIN to MEMBER by OWNER")
     void shouldDemoteToMemberByOwner() {
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId())).thenReturn(Optional.of(ownerMember));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), adminUser.getId())).thenReturn(Optional.of(adminMember));
         when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
@@ -586,6 +608,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should transfer ownership and downgrade former owner to ADMIN")
     void shouldTransferOwnershipSuccessfully() {
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId())).thenReturn(Optional.of(ownerMember));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), adminUser.getId())).thenReturn(Optional.of(adminMember));
         when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
@@ -600,6 +623,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should throw 400 when OWNER tries to leave without transferring ownership")
     void shouldThrowWhenOwnerLeavesWithoutTransferring() {
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId())).thenReturn(Optional.of(ownerMember));
         when(teamMemberRepository.findByTeamId(sampleTeam.getId())).thenReturn(List.of(ownerMember, adminMember));
 
@@ -611,6 +635,7 @@ class TeamServiceTest {
     @Test
     @DisplayName("Should delete team when sole remaining member leaves")
     void shouldDeleteTeamWhenSoleMemberLeaves() {
+        when(teamRepository.findByIdWithLock(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
         when(teamMemberRepository.findByTeamIdAndUserId(sampleTeam.getId(), ownerUser.getId())).thenReturn(Optional.of(ownerMember));
         when(teamMemberRepository.findByTeamId(sampleTeam.getId())).thenReturn(List.of(ownerMember));
 
@@ -640,4 +665,3 @@ class TeamServiceTest {
         verify(teamInviteLinkRepository, times(1)).deleteOldInviteLinks(any(Instant.class));
     }
 }
-

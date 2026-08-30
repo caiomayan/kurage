@@ -15,7 +15,6 @@ import { Avatar } from "@/components/ui/Avatar";
 import { CountryFlag } from "@/components/ui/CountryFlag";
 import { RoleIcon } from "@/components/ui/RoleIcon";
 import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
-import { FaceitLevelIcon } from "@/components/ui/faceit-levels/FaceitLevelIcon";
 import { cn } from "@/lib/utils";
 import type { User, UserWithStats } from "@/types/user";
 
@@ -32,9 +31,9 @@ export const UserMenuDropdown = memo(function UserMenuDropdown({
 }: UserMenuDropdownProps) {
   const stats = (user as UserWithStats).stats;
   const matches = stats?.matchesPlayed ?? 0;
-  const kurageLevel = stats?.kurageLevel ?? 1;
-  const kurageElo = stats?.kurageElo ?? 200;
-  const hltvRating = stats?.hltvRating ? stats.hltvRating.toFixed(2) : (matches > 0 ? "1.00" : "-");
+  const kurageLevel = stats?.kurageLevel ?? null;
+  const kurageElo = matches > 0 && stats?.kurageElo != null ? stats.kurageElo : "—";
+  const hltvRating = stats?.hltvRating != null ? stats.hltvRating.toFixed(2) : "—";
   const kdRatio = stats && stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : (stats && stats.kills > 0 ? `${stats.kills}.00` : "-");
   const winRate = stats && matches > 0 ? `${((stats.matchesWon / matches) * 100).toFixed(0)}%` : "-";
 
@@ -45,8 +44,8 @@ export const UserMenuDropdown = memo(function UserMenuDropdown({
       label: "Perfil",
       href: profileUrl,
       icon: PiUser,
-      accentColor: "group-hover:text-[#a9c8c0]",
-      glowColor: "group-hover:border-[#a9c8c0]/30",
+      accentColor: "group-hover:text-[var(--kurage-accent)]",
+      glowColor: "group-hover:border-[var(--kurage-accent)]/30",
       description: "Telemetria e calibração",
     },
     {
@@ -61,8 +60,8 @@ export const UserMenuDropdown = memo(function UserMenuDropdown({
       label: "Inventário & Craft",
       href: "/inventory",
       icon: PiSparkle,
-      accentColor: "group-hover:text-[#a9c8c0]",
-      glowColor: "group-hover:border-[#a9c8c0]/30",
+      accentColor: "group-hover:text-[var(--kurage-accent)]",
+      glowColor: "group-hover:border-[var(--kurage-accent)]/30",
       description: "Customizador de skins e loadout",
     },
     {
@@ -91,12 +90,12 @@ export const UserMenuDropdown = memo(function UserMenuDropdown({
         <div
           className="absolute -top-12 left-1/2 -translate-x-1/2 w-60 h-40 opacity-20 blur-2xl pointer-events-none"
           style={{
-            background: "radial-gradient(circle, #a9c8c0 0%, #92bce3 40%, transparent 75%)",
+            background: "radial-gradient(circle, var(--kurage-accent) 0%, #92bce3 40%, transparent 75%)",
           }}
         />
 
         {/* Top Glowing Hairline */}
-        <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[#a9c8c0]/40 to-transparent" />
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[var(--kurage-accent)]/40 to-transparent" />
       </div>
 
       {/* ── 2. HEADER IDENTITY: CENTERED AVATAR & PROMINENT PROFILE ── */}
@@ -114,18 +113,18 @@ export const UserMenuDropdown = memo(function UserMenuDropdown({
             />
             {/* Status node */}
             <div className="absolute -bottom-0.5 right-1 w-3.5 h-3.5 rounded-full bg-[#080808] flex items-center justify-center">
-              <div className="w-2 h-2 rounded-full bg-[#a9c8c0]" />
+              <div className="w-2 h-2 rounded-full bg-[var(--kurage-accent)]" />
             </div>
           </div>
 
           {/* Username */}
           <div className="flex items-center gap-2">
-            <span className="font-display text-[22px] font-bold text-white tracking-tight leading-none group-hover/profile:text-[#a9c8c0] transition-colors">
+            <span className="font-display text-[22px] font-bold text-white tracking-tight leading-none group-hover/profile:text-[var(--kurage-accent)] transition-colors">
               {user.username}
             </span>
             {user.subscriptionTier && user.subscriptionTier !== "FREE" && (
-              <span className="rounded-full bg-[#a9c8c0]/10 px-2 py-0.5 text-[9px] font-mono font-semibold tracking-wider text-[#a9c8c0] uppercase border border-[#a9c8c0]/25">
-                {user.subscriptionTier}
+              <span className="rounded-full border border-[var(--mare-accent)]/25 bg-[var(--mare-accent)]/10 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-[var(--mare-accent)]">
+                MARÉ
               </span>
             )}
           </div>
@@ -139,10 +138,8 @@ export const UserMenuDropdown = memo(function UserMenuDropdown({
             <RoleIcon role={user.primaryFunction} size={15} expandOnHover={true} />
           )}
 
-          {kurageLevel > 0 ? (
+          {kurageLevel != null && kurageLevel > 0 && (
             <KurageLevelIcon level={kurageLevel} expandOnHover={true} />
-          ) : (
-            <FaceitLevelIcon level={10} expandOnHover={true} />
           )}
         </div>
 
@@ -150,7 +147,7 @@ export const UserMenuDropdown = memo(function UserMenuDropdown({
         <div className="mt-3.5 pt-3 border-t border-white/[0.05] grid grid-cols-4 gap-1 w-full text-center">
           <div className="flex flex-col">
             <span className="text-[9px] font-sans font-semibold uppercase tracking-wider text-mute">ELO</span>
-            <span className="font-display text-[17px] font-bold text-[#a9c8c0] leading-tight mt-0.5">
+            <span className="font-display text-[17px] font-bold text-[var(--kurage-accent)] leading-tight mt-0.5">
               {kurageElo}
             </span>
           </div>

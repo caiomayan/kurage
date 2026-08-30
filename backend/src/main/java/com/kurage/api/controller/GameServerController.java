@@ -7,11 +7,8 @@ import com.kurage.api.service.GameServerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -23,9 +20,6 @@ import java.util.UUID;
 public class GameServerController {
 
     private final GameServerService gameServerService;
-
-    @Value("${game.server.api.key:}")
-    private String configuredApiKey;
 
     @GetMapping
     public ResponseEntity<List<GameServerResponse>> getServers(@RequestParam(required = false) GameMode mode) {
@@ -46,12 +40,7 @@ public class GameServerController {
             @RequestHeader(value = "X-Server-Api-Key", required = false) String apiKey,
             @Valid @RequestBody GameServerHeartbeatRequest request) {
 
-        if (configuredApiKey != null && !configuredApiKey.isBlank() && !configuredApiKey.equals(apiKey)) {
-            log.warn("Unauthorized heartbeat attempt for server {} with provided key: {}", id, apiKey != null ? "[PROTECTED]" : "null");
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Chave de API do servidor inválida ou não autorizada");
-        }
-
-        GameServerResponse response = gameServerService.processHeartbeat(id, request);
+        GameServerResponse response = gameServerService.processAuthenticatedHeartbeat(id, apiKey, request);
         return ResponseEntity.ok(response);
     }
 }

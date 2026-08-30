@@ -1,4 +1,5 @@
-import { CS2EconomyItem, CS2ItemType, CS2Economy } from "@ianlucas/cs2-lib";
+import { CS2EconomyItem, CS2Economy } from "@ianlucas/cs2-lib";
+import { english } from "@ianlucas/cs2-lib/translations/english";
 import { ensureEconomyLoaded } from "./economy.ts";
 
 export interface ParsedItemName {
@@ -164,6 +165,16 @@ export function parseItemName(item: CS2EconomyItem | { id?: number; name?: strin
 }
 
 /**
+ * Keeps the catalog display in Portuguese while exposing the official English
+ * item name to the search index. CS2 players naturally use both vocabularies.
+ */
+export function getItemSearchNames(item: { id?: number; name?: string }): string[] {
+  const names = [item.name];
+  if (item.id !== undefined) names.push(english[item.id]?.name);
+  return names.filter((name): name is string => Boolean(name));
+}
+
+/**
  * Gets high-resolution CDN image for a CS2 item with safe fallback
  */
 export function getItemImage(item: CS2EconomyItem | null | undefined, wear?: number): string | null {
@@ -174,8 +185,9 @@ export function getItemImage(item: CS2EconomyItem | null | undefined, wear?: num
       const url = item.getImageUrl(wear);
       if (url && url.length > 5) return url;
     }
-    if ((item as any).image) {
-      return (item as any).image;
+    const image = (item as CS2EconomyItem & { image?: unknown }).image;
+    if (typeof image === "string" && image.length > 5) {
+      return image;
     }
   } catch {
     // fallback

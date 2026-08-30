@@ -19,18 +19,5 @@ services:
     ports:
       - "6379:6379"
 
-  mongo:
-    image: mongo:6-jammy
-    container_name: kurage_mongo_dev
-    restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin123}
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodata_dev:/data/db
-
 volumes:
   pgdata_dev:
-  mongodata_dev:

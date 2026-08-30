@@ -14,15 +14,11 @@ import {
   PiArrowDown,
   PiMinus,
   PiSignIn,
-  PiLightning,
-  PiArrowsClockwise,
 } from "react-icons/pi";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { CountryFlag } from "@/components/ui/CountryFlag";
 import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
-import { RoleIcon } from "@/components/ui/RoleIcon";
-import { MergulharButton } from "@/components/ui/MergulharButton";
 import type { User, UserWithStats } from "@/types/user";
 import type { PlayerRankingContext } from "@/types/ranking";
 
@@ -51,10 +47,10 @@ export function UserRankingAnchorBar({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="pointer-events-auto flex items-center justify-between p-3.5 rounded-[14px] bg-[#070b0e]/95 backdrop-blur-2xl border border-white/[0.08] shadow-[0_12px_45px_rgba(0,0,0,0.85)]"
+          className="pointer-events-auto flex items-center justify-between p-3.5 rounded-[14px] bg-[#070b0e] border border-white/[0.08] shadow-[0_12px_45px_rgba(0,0,0,0.85)]"
         >
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#a9c8c0]/10 border border-[#a9c8c0]/20 flex items-center justify-center text-[#a9c8c0]">
+            <div className="w-9 h-9 rounded-full bg-[var(--kurage-accent)]/10 border border-[var(--kurage-accent)]/20 flex items-center justify-center text-[var(--kurage-accent)]">
               <PiTrophy className="w-4 h-4" />
             </div>
             <div className="flex flex-col">
@@ -69,7 +65,7 @@ export function UserRankingAnchorBar({
 
           <button
             onClick={onLogin}
-            className="inline-flex h-8 items-center justify-center gap-1.5 px-3.5 rounded-[6px] bg-[#a9c8c0]/15 hover:bg-[#a9c8c0]/25 border border-[#a9c8c0]/30 text-[12px] font-sans font-medium text-[#a9c8c0] transition-colors cursor-pointer"
+            className="inline-flex h-8 items-center justify-center gap-1.5 px-3.5 rounded-[6px] bg-[var(--kurage-accent)]/15 hover:bg-[var(--kurage-accent)]/25 border border-[var(--kurage-accent)]/30 text-[12px] font-sans font-medium text-[var(--kurage-accent)] transition-colors cursor-pointer"
           >
             <PiSignIn className="w-3.5 h-3.5" />
             <span>Entrar com Steam</span>
@@ -89,8 +85,8 @@ export function UserRankingAnchorBar({
 
   const currentPosition = userContext?.currentPosition;
   const positionDelta = userContext?.deltaYesterday ?? 0;
-  const kurageElo = userStats?.kurageElo ?? (contextPlayer?.kurageElo ?? 200);
-  const kurageLevel = userStats?.kurageLevel ?? (contextPlayer?.kurageLevel ?? 1);
+  const kurageElo = userStats?.kurageElo ?? contextPlayer?.kurageElo ?? null;
+  const kurageLevel = userStats?.kurageLevel ?? contextPlayer?.kurageLevel ?? null;
 
   let kdRatio = "-";
   if (contextPlayer?.kdRatio !== undefined && contextPlayer?.kdRatio !== null) {
@@ -118,7 +114,7 @@ export function UserRankingAnchorBar({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="pointer-events-auto flex items-center justify-between gap-4 p-3 sm:p-3.5 rounded-[14px] bg-[#070b0e]/95 backdrop-blur-2xl border border-[rgba(169,200,192,0.25)] shadow-[0_16px_50px_rgba(0,0,0,0.9)]"
+          className="pointer-events-auto flex items-center justify-between gap-4 p-3 sm:p-3.5 rounded-[14px] bg-[#070b0e] border border-[rgba(var(--kurage-accent-rgb),0.25)] shadow-[0_16px_50px_rgba(0,0,0,0.9)]"
         >
           {/* Left: User Identity & Calibration / Rank Pill */}
           <div className="flex items-center gap-3 min-w-0">
@@ -172,8 +168,8 @@ export function UserRankingAnchorBar({
                       #{currentPosition ?? "-"}
                     </span>
                     <span className="text-stone-600">·</span>
-                    <span className="font-sans text-[13px] text-[#a9c8c0] font-medium leading-none">
-                      {kurageElo} ELO
+                    <span className="font-sans text-[13px] text-[var(--kurage-accent)] font-medium leading-none">
+                      {kurageElo !== null ? `${kurageElo} ELO` : "ELO indisponível"}
                     </span>
                     <span className="text-stone-600 hidden sm:inline">·</span>
                     <span className="text-[11px] font-sans text-stone-400 hidden sm:inline">
@@ -183,7 +179,7 @@ export function UserRankingAnchorBar({
                 ) : isCalibrating ? (
                   <>
                     <span className="font-sans text-[13px] font-medium text-stone-300">
-                      {kurageElo} ELO
+                      {kurageElo !== null ? `${kurageElo} ELO` : "ELO indisponível"}
                     </span>
                     <span className="text-stone-600">·</span>
                     <span className="text-[11px] font-sans text-amber-300/90">
@@ -206,17 +202,17 @@ export function UserRankingAnchorBar({
               onClick={() => setIsModalOpen(true)}
               className="hidden sm:inline-flex h-8 items-center justify-center gap-1 px-3 rounded-[6px] bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-[12px] font-sans font-medium text-stone-300 hover:text-white transition-colors cursor-pointer"
             >
-              <PiChartLineUp className="w-3.5 h-3.5 text-[#a9c8c0]" />
+              <PiChartLineUp className="w-3.5 h-3.5 text-[var(--kurage-accent)]" />
               <span>Detalhes</span>
             </button>
 
             {isUncalibrated || isCalibrating ? (
               <Link
                 href="/mar"
-                className="inline-flex h-8 items-center justify-center gap-1.5 px-3.5 rounded-[6px] bg-[#a9c8c0]/15 hover:bg-[#a9c8c0]/25 border border-[#a9c8c0]/35 text-[12px] font-sans font-medium text-white transition-all shadow-[0_0_15px_rgba(169,200,192,0.1)]"
+                className="inline-flex h-8 items-center justify-center gap-1.5 px-3.5 rounded-[6px] bg-[var(--kurage-accent)]/15 hover:bg-[var(--kurage-accent)]/25 border border-[var(--kurage-accent)]/35 text-[12px] font-sans font-medium text-white transition-all shadow-[0_0_15px_rgba(var(--kurage-accent-rgb),0.1)]"
               >
                 <span>Jogar Agora</span>
-                <PiArrowRight className="w-3 h-3 text-[#a9c8c0]" />
+                <PiArrowRight className="w-3 h-3 text-[var(--kurage-accent)]" />
               </Link>
             ) : (
               <Link
@@ -258,7 +254,7 @@ export function UserRankingAnchorBar({
                   className="w-full h-full"
                   style={{
                     background:
-                      "radial-gradient(ellipse at 50% 0%, rgba(169, 200, 192, 0.4) 0%, rgba(146, 188, 227, 0.15) 50%, transparent 80%)",
+                      "radial-gradient(ellipse at 50% 0%, rgba(var(--kurage-accent-rgb),0.4) 0%, rgba(146, 188, 227, 0.15) 50%, transparent 80%)",
                   }}
                 />
               </div>
@@ -280,7 +276,9 @@ export function UserRankingAnchorBar({
                         {user.username}
                       </span>
                       <CountryFlag country={user.country} expandOnHover={true} />
-                      {kurageLevel > 0 && <KurageLevelIcon level={kurageLevel} />}
+                      {matches > 0 && kurageLevel !== null && kurageLevel > 0 && (
+                        <KurageLevelIcon level={kurageLevel} />
+                      )}
                     </div>
 
                     <span className="text-[12px] font-sans text-stone-400">
@@ -325,7 +323,7 @@ export function UserRankingAnchorBar({
                             className={cn(
                               "h-2 rounded-full transition-all duration-500",
                               isCompleted
-                                ? "bg-[#a9c8c0] shadow-[0_0_10px_rgba(169,200,192,0.6)]"
+                                ? "bg-[var(--kurage-accent)] shadow-[0_0_10px_rgba(var(--kurage-accent-rgb),0.6)]"
                                 : "bg-white/10"
                             )}
                           />
@@ -363,11 +361,11 @@ export function UserRankingAnchorBar({
                     <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-mute">
                       Rating ELO
                     </span>
-                    <span className="font-display text-[26px] font-extrabold text-[#a9c8c0] mt-1 leading-none">
-                      {kurageElo}
+                    <span className="font-display text-[26px] font-extrabold text-[var(--kurage-accent)] mt-1 leading-none">
+                      {matches > 0 && kurageElo !== null ? kurageElo : "—"}
                     </span>
                     <span className="mt-1 text-[11px] font-sans text-stone-400">
-                      Nível {kurageLevel}
+                      {matches > 0 && kurageLevel !== null ? `Nível ${kurageLevel}` : "Em calibração"}
                     </span>
                   </div>
 
@@ -385,7 +383,7 @@ export function UserRankingAnchorBar({
                 </div>
 
                 {/* Next Target / Competitor to Pass (If calibrated and exists) */}
-                {isFullyCalibrated && userContext?.nextPlayerToPass && (
+                {isFullyCalibrated && kurageElo !== null && userContext?.nextPlayerToPass && (
                   <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-[#e5c158]/10 flex items-center justify-center text-[#e5c158]">
@@ -403,7 +401,7 @@ export function UserRankingAnchorBar({
 
                     <div className="text-right">
                       <span className="text-[11px] font-sans text-stone-400 block">Diferença</span>
-                      <span className="text-[13px] font-mono font-bold text-[#a9c8c0]">
+                      <span className="text-[13px] font-mono font-bold text-[var(--kurage-accent)]">
                         +{(userContext.nextPlayerToPass.kurageElo || 0) - kurageElo} ELO
                       </span>
                     </div>
@@ -416,9 +414,9 @@ export function UserRankingAnchorBar({
                 <Link
                   href="/mar"
                   onClick={() => setIsModalOpen(false)}
-                  className="inline-flex h-10 items-center justify-center gap-2 px-5 rounded-[8px] bg-[#a9c8c0]/15 hover:bg-[#a9c8c0]/25 border border-[#a9c8c0]/35 text-[13px] font-sans font-medium text-white transition-all shadow-[0_0_20px_rgba(169,200,192,0.1)]"
+                  className="inline-flex h-10 items-center justify-center gap-2 px-5 rounded-[8px] bg-[var(--kurage-accent)]/15 hover:bg-[var(--kurage-accent)]/25 border border-[var(--kurage-accent)]/35 text-[13px] font-sans font-medium text-white transition-all shadow-[0_0_20px_rgba(var(--kurage-accent-rgb),0.1)]"
                 >
-                  <PiWaves className="w-4 h-4 text-[#a9c8c0]" />
+                  <PiWaves className="w-4 h-4 text-[var(--kurage-accent)]" />
                   <span>Mergulhar no Mar</span>
                 </Link>
 

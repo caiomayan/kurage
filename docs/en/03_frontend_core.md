@@ -21,6 +21,15 @@ Kurage's frontend is built with **Next.js 16 (App Router)** designed for maximum
 - **Visual Feedback:** Sonner (lightweight high-performance toast notifications)
 - **Typography:** Inter (Body) + Manrope (Display/Headers) + JetBrains Mono (Data/IDs)
 
+### Data and failure states
+
+- empty lists render only after a valid backend response;
+- ranking, search, and inventory failures have dedicated retryable states;
+- profiles return 404 only when the API confirms that the player does not exist;
+- temporary API failure reaches the error boundary and never becomes a false 404;
+- telemetry preserves the last known snapshot, reports unavailability, and
+  expires stale live data.
+
 ```
 frontend/src
 ├── app/
@@ -63,8 +72,13 @@ frontend/src
 1. User clicks **"Entrar com Steam"** in the header or platform actions.
 2. `lib/auth.tsx` records the current path in `sessionStorage` (`kurage_auth_redirect_to`).
 3. Browser navigates to backend (`/auth/steam`), initiating the secure OpenID handshake with Valve.
-4. On successful authentication, backend sets **`HttpOnly`**, **`Secure`**, **`SameSite=Lax`** cookies for `refresh_token` and `device_id`, and redirects the user to `/auth/callback`.
-5. `app/auth/callback/page.tsx` calls `refreshToken()` via `POST /auth/refresh` (browser sends HttpOnly cookies automatically), storing the short-lived JWT access token **in volatile memory only** (`inMemoryToken`), never touching `localStorage` (complete XSS mitigation).
+4. The backend validates and consumes one-time Steam state, sets `refresh_token`
+   and `device_id` as **HttpOnly**, **Secure**, **SameSite=Lax**, and returns to the
+   sanitized internal path.
+5. On mount, `AuthProvider` calls `POST /auth/refresh` with cookies and stores the
+   JWT **in volatile memory only** (`inMemoryToken`), never in `localStorage`.
+   Only `401` triggers refresh; `403` preserves the session and means access was
+   denied.
 6. Profile data is fetched from `/users/me` and the user is securely redirected back to their previous page (`kurage_auth_redirect_to`).
 7. **Security Headers:** Configured in `next.config.ts` including strict Content-Security-Policy, X-Frame-Options (DENY), X-Content-Type-Options (nosniff), and Referrer-Policy.
 
@@ -101,6 +115,7 @@ On desktop (width ≥ 1280px), pages utilize a functional 3-column split:
 - **Discovery Grid:** 4 footer callouts directing users to platform verticals (Rankings, Players, Teams, Servers).
 
 ### 2. Player Leaderboard (`app/ranking/page.tsx`)
+- **Data integrity:** the frontend does not manufacture position, ELO, rating, or chart points. Zero-match accounts render as calibrating and are absent from the leaderboard; history is drawn only from persisted snapshots.
 - **Top 3 Podium (`RankingPodium.tsx`):** Expanded cards in Gold (#1), Silver (#2), and Bronze (#3), showcasing ELO, K/D, win rate, level badge, and verified pro status.
 - **Complete Leaderboard Table:**
   - Absolute position with recent position delta indicators (`↑`, `↓`, `—`).

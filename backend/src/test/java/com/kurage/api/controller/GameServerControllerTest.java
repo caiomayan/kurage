@@ -16,7 +16,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
@@ -48,7 +47,6 @@ class GameServerControllerTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(gameServerController, "configuredApiKey", VALID_API_KEY);
         mockMvc = MockMvcBuilders.standaloneSetup(gameServerController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -149,7 +147,8 @@ class GameServerControllerTest {
                     "RETAKE", "de_anubis", 8, 10, true, Instant.now()
             );
 
-            when(gameServerService.processHeartbeat(eq(id), any(GameServerHeartbeatRequest.class)))
+            when(gameServerService.processAuthenticatedHeartbeat(
+                    eq(id), eq(VALID_API_KEY), any(GameServerHeartbeatRequest.class)))
                     .thenReturn(response);
 
             mockMvc.perform(post("/servers/{id}/heartbeat", id)
@@ -171,6 +170,12 @@ class GameServerControllerTest {
                     .currentPlayers(8)
                     .build();
 
+            when(gameServerService.processAuthenticatedHeartbeat(
+                    eq(id), eq("wrong-key"), any(GameServerHeartbeatRequest.class)))
+                    .thenThrow(new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED,
+                            "Chave de API do servidor inválida ou não autorizada"));
+
             mockMvc.perform(post("/servers/{id}/heartbeat", id)
                             .header("X-Server-Api-Key", "wrong-key")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -188,10 +193,39 @@ class GameServerControllerTest {
                     .currentPlayers(8)
                     .build();
 
+            when(gameServerService.processAuthenticatedHeartbeat(
+                    eq(id), eq(null), any(GameServerHeartbeatRequest.class)))
+                    .thenThrow(new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED,
+                            "Chave de API do servidor inválida ou não autorizada"));
+
             mockMvc.perform(post("/servers/{id}/heartbeat", id)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("Deve falhar fechado quando a credencial do servidor não estiver provisionada")
+        void shouldFailClosedWhenServerApiKeyIsMissing() throws Exception {
+            UUID id = UUID.randomUUID();
+            GameServerHeartbeatRequest request = GameServerHeartbeatRequest.builder()
+                    .currentMap("de_anubis")
+                    .currentPlayers(8)
+                    .build();
+
+            when(gameServerService.processAuthenticatedHeartbeat(
+                    eq(id), eq(VALID_API_KEY), any(GameServerHeartbeatRequest.class)))
+                    .thenThrow(new ResponseStatusException(
+                            HttpStatus.SERVICE_UNAVAILABLE,
+                            "Integração com este servidor de jogo indisponível"));
+
+            mockMvc.perform(post("/servers/{id}/heartbeat", id)
+                            .header("X-Server-Api-Key", VALID_API_KEY)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.message").value("Integração com este servidor de jogo indisponível"));
         }
 
         @Test

@@ -4,10 +4,28 @@
  * single-flight JWT token refresh deduplication, and resilient error recovery.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { API_BASE_URL } from "@/lib/constants";
 
 let inMemoryToken: string | null = null;
 let inflightRefreshPromise: Promise<string | null> | null = null;
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly retryAfterMs: number | null = null,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function getRetryAfterMs(response: Response): number | null {
+  const retryAfter = response.headers.get("Retry-After");
+  if (!retryAfter) return null;
+  const seconds = Number(retryAfter);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1_000 : null;
+}
 
 export function setAccessToken(token: string | null) {
   inMemoryToken = token;
@@ -63,15 +81,25 @@ export interface ApiRequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
+function resolveApiUrl(endpoint: string): string {
+  const apiBase = new URL(API_BASE_URL);
+  if (/^https?:\/\//i.test(endpoint)) {
+    const absolute = new URL(endpoint);
+    if (absolute.origin !== apiBase.origin) {
+      throw new Error("apiFetch only accepts URLs from the configured API origin");
+    }
+    return absolute.toString();
+  }
+  return `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+}
+
 export async function apiFetch<T>(
   endpoint: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
   const { params, skipAuth = false, headers, ...restOptions } = options;
 
-  let url = endpoint.startsWith("http")
-    ? endpoint
-    : `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+  let url = resolveApiUrl(endpoint);
 
   if (params) {
     const searchParams = new URLSearchParams();
@@ -122,8 +150,13 @@ export async function apiFetch<T>(
     credentials: "include",
   });
 
-  // Handle 401 and attempt single-flight refresh
-  if (response.status === 401 && !skipAuth && !endpoint.includes("/auth/")) {
+  // Only an authentication failure can renew the session. A 403 is a real
+  // authorization denial and must never rotate a healthy refresh token.
+  if (
+    response.status === 401 &&
+    !skipAuth &&
+    !endpoint.includes("/auth/")
+  ) {
     const newToken = await refreshToken();
 
     if (newToken) {
@@ -145,7 +178,7 @@ export async function apiFetch<T>(
     } catch {
       // not a json response
     }
-    throw new Error(errorMessage);
+    throw new ApiError(response.status, errorMessage, getRetryAfterMs(response));
   }
 
   if (response.status === 204) {
@@ -189,4 +222,3 @@ export const api = {
   delete: <T>(endpoint: string, options?: ApiRequestOptions) =>
     apiFetch<T>(endpoint, { ...options, method: "DELETE" }),
 };
-

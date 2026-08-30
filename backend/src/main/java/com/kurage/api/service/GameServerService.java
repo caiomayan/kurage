@@ -2,6 +2,7 @@ package com.kurage.api.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kurage.api.config.TransactionHooks;
 import com.kurage.api.domain.GameMode;
 import com.kurage.api.domain.GameServer;
 import com.kurage.api.domain.PlayerStats;
@@ -13,6 +14,7 @@ import com.kurage.api.dto.response.GameServerResponse;
 import com.kurage.api.dto.response.ServerPlayerResponse;
 import com.kurage.api.repository.GameServerRepository;
 import com.kurage.api.repository.UserRepository;
+import com.kurage.api.util.HashUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -24,6 +26,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -50,7 +54,11 @@ public class GameServerService {
             if (redisTemplate != null) {
                 String cached = redisTemplate.opsForValue().get(CACHE_PREFIX_ALL);
                 if (cached != null) {
-                    return objectMapper.readValue(cached, new TypeReference<List<GameServerResponse>>() {});
+                    Instant observedAt = Instant.now();
+                    return objectMapper.readValue(cached, new TypeReference<List<GameServerResponse>>() {})
+                            .stream()
+                            .map(server -> server.withEffectiveLiveness(observedAt))
+                            .toList();
                 }
             }
         } catch (Exception e) {
@@ -92,7 +100,11 @@ public class GameServerService {
             if (redisTemplate != null) {
                 String cached = redisTemplate.opsForValue().get(cacheKey);
                 if (cached != null) {
-                    return objectMapper.readValue(cached, new TypeReference<List<GameServerResponse>>() {});
+                    Instant observedAt = Instant.now();
+                    return objectMapper.readValue(cached, new TypeReference<List<GameServerResponse>>() {})
+                            .stream()
+                            .map(server -> server.withEffectiveLiveness(observedAt))
+                            .toList();
                 }
             }
         } catch (Exception e) {
@@ -134,7 +146,8 @@ public class GameServerService {
             if (redisTemplate != null) {
                 String cached = redisTemplate.opsForValue().get(cacheKey);
                 if (cached != null) {
-                    return objectMapper.readValue(cached, GameServerResponse.class);
+                    return objectMapper.readValue(cached, GameServerResponse.class)
+                            .withEffectiveLiveness(Instant.now());
                 }
             }
         } catch (Exception e) {
@@ -165,7 +178,10 @@ public class GameServerService {
     }
 
     @Transactional
-    public GameServerResponse processHeartbeat(UUID serverId, GameServerHeartbeatRequest request) {
+    public GameServerResponse processAuthenticatedHeartbeat(
+            UUID serverId,
+            String apiKey,
+            GameServerHeartbeatRequest request) {
         if (serverId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ID do servidor não pode ser nulo");
         }
@@ -173,13 +189,20 @@ public class GameServerService {
         GameServer server = gameServerRepository.findById(serverId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Servidor de jogo não encontrado"));
 
+        authenticateHeartbeat(server, apiKey);
+
+        validateHeartbeatIdentity(server, request);
+
         server.setCurrentMap(request.getCurrentMap());
         server.setCurrentPlayers(request.getCurrentPlayers());
         if (request.getMaxPlayers() != null && request.getMaxPlayers() > 0) {
             server.setMaxPlayers(request.getMaxPlayers());
         }
-        if (request.getGameMode() != null) {
-            server.setGameMode(request.getGameMode());
+        if (request.getCtScore() != null) {
+            server.setCtScore(request.getCtScore());
+        }
+        if (request.getTrScore() != null) {
+            server.setTrScore(request.getTrScore());
         }
         server.setOnline(true);
         server.setLastHeartbeat(Instant.now());
@@ -203,56 +226,94 @@ public class GameServerService {
 
                     enrichedPlayers.add(ServerPlayerResponse.builder()
                             .kurageId(u.getKurageId())
+                            .isKurageMember(true)
                             .steamId64(u.getSteamId64())
                             .username(p.getUsername() != null && !p.getUsername().isBlank() ? p.getUsername() : u.getUsername())
                             .avatarUrl(u.getAvatarUrl())
                             .team(p.getTeam() != null ? p.getTeam() : "SPEC")
-                            .kurageLevel(1)
-                            .kurageElo(stats != null && stats.getKurageElo() != null ? stats.getKurageElo() : 2000)
+                            .kurageLevel(stats != null ? stats.getKurageLevel() : null)
+                            .kurageElo(stats != null ? stats.getKurageElo() : null)
                             .faceitLevel(faceit != null ? faceit.getLevel() : null)
                             .isVerifiedPro(u.isVerifiedPro())
                             .clanTag(clanTag)
                             .kills(p.getKills() != null ? p.getKills() : 0)
                             .deaths(p.getDeaths() != null ? p.getDeaths() : 0)
                             .ping(p.getPing() != null ? p.getPing() : 0)
-                            .isAlive(p.getIsAlive() != null ? p.getIsAlive() : true)
+                            .isAlive(p.getIsAlive())
                             .build());
                 } else {
                     enrichedPlayers.add(ServerPlayerResponse.builder()
+                            .isKurageMember(false)
                             .steamId64(p.getSteamId64())
-                            .username(p.getUsername() != null ? p.getUsername() : "Player")
-                            .avatarUrl("https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg")
+                            .username(p.getUsername() != null && !p.getUsername().isBlank()
+                                    ? p.getUsername()
+                                    : "Jogador não vinculado")
                             .team(p.getTeam() != null ? p.getTeam() : "SPEC")
-                            .kurageLevel(1)
-                            .kurageElo(2000)
                             .kills(p.getKills() != null ? p.getKills() : 0)
                             .deaths(p.getDeaths() != null ? p.getDeaths() : 0)
                             .ping(p.getPing() != null ? p.getPing() : 0)
-                            .isAlive(p.getIsAlive() != null ? p.getIsAlive() : true)
+                            .isAlive(p.getIsAlive())
                             .build());
                 }
             }
         }
 
-        // Cache players in Redis
-        try {
-            if (redisTemplate != null) {
-                redisTemplate.opsForValue().set(
-                        CACHE_PREFIX_PLAYERS + serverId,
-                        objectMapper.writeValueAsString(enrichedPlayers),
-                        Duration.ofMinutes(3)
-                );
+        List<ServerPlayerResponse> confirmedPlayers = List.copyOf(enrichedPlayers);
+        TransactionHooks.afterCommit(() -> {
+            try {
+                if (redisTemplate != null) {
+                    redisTemplate.opsForValue().set(
+                            CACHE_PREFIX_PLAYERS + serverId,
+                            objectMapper.writeValueAsString(confirmedPlayers),
+                            GameServerResponse.HEARTBEAT_STALE_AFTER
+                    );
+                }
+            } catch (Exception e) {
+                log.warn("Redis unavailable during server players cache write: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Redis unavailable during server players cache write: {}", e.getMessage());
-        }
-
-        evictServerCaches(serverId, updated.getGameMode());
+            evictServerCaches(serverId, updated.getGameMode());
+        });
 
         log.debug("Heartbeat processed for server '{}' (map: {}, players: {}/{})",
                 updated.getName(), updated.getCurrentMap(), updated.getCurrentPlayers(), updated.getMaxPlayers());
 
         return GameServerResponse.create(updated, enrichedPlayers);
+    }
+
+    private void authenticateHeartbeat(GameServer server, String apiKey) {
+        if (server.getApiKeyHash() == null || server.getApiKeyHash().isBlank()) {
+            log.error("Heartbeat credential is not provisioned for server {}", server.getId());
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Integração com este servidor de jogo indisponível"
+            );
+        }
+
+        String providedHash = HashUtils.sha256(apiKey);
+        if (providedHash == null || !MessageDigest.isEqual(
+                server.getApiKeyHash().getBytes(StandardCharsets.US_ASCII),
+                providedHash.getBytes(StandardCharsets.US_ASCII))) {
+            log.warn("Unauthorized heartbeat attempt for server {}", server.getId());
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Chave de API do servidor inválida ou não autorizada"
+            );
+        }
+    }
+
+    private void validateHeartbeatIdentity(GameServer server, GameServerHeartbeatRequest request) {
+        if (request.getGameMode() != null && request.getGameMode() != server.getGameMode()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Heartbeat gameMode does not match the registered server identity"
+            );
+        }
+        if (request.getServerKind() != null && request.getServerKind() != server.getServerKind()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Heartbeat serverKind does not match the registered server identity"
+            );
+        }
     }
 
     private List<ServerPlayerResponse> getLivePlayersForServer(UUID serverId) {
@@ -270,15 +331,15 @@ public class GameServerService {
         return List.of();
     }
 
-    @Scheduled(fixedRate = 120000) // Executa a cada 2 minutos
+    @Scheduled(fixedRateString = "${game.server.offline-scan-ms:30000}")
     @Transactional
     public void markOfflineServers() {
-        Instant threshold = Instant.now().minus(Duration.ofMinutes(2));
+        Instant threshold = Instant.now().minus(GameServerResponse.HEARTBEAT_STALE_AFTER);
         int updatedCount = gameServerRepository.markServersOfflineOlderThan(threshold);
 
         if (updatedCount > 0) {
-            log.info("Marked {} game server(s) as offline due to missing heartbeat (>2min)", updatedCount);
-            evictAllServerCaches();
+            log.info("Marked {} game server(s) as offline due to stale heartbeat (>90s)", updatedCount);
+            TransactionHooks.afterCommit(this::evictAllServerCaches);
         }
     }
 

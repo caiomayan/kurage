@@ -9,22 +9,21 @@ import React, {
   useRef,
 } from "react";
 import {
-  CS2Economy,
   CS2Inventory,
+  CS2InventoryData,
+  CS2BaseInventoryItem,
   CS2EconomyItem,
-  CS2InventoryItem,
   CS2Team,
-  CS2_ITEMS,
 } from "@ianlucas/cs2-lib";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
 import { TransformedInventoryItem, transformItem } from "./inventory-transform";
 import { ensureEconomyLoaded } from "./economy.ts";
+import { removeMusicKitSlot, replaceMusicKitSlot } from "./inventory-music-kit.ts";
 
 // Ensure economy is initialized with full translations
 ensureEconomyLoaded();
-
-const STORAGE_KEY = "kurage_cs2_inventory_v1";
 
 export interface CraftAttributes {
   id: number;
@@ -59,35 +58,72 @@ export interface CraftAttributes {
 interface InventoryContextType {
   inventory: CS2Inventory;
   items: TransformedInventoryItem[];
+  musicKit: TransformedInventoryItem | null;
   itemCount: number;
   maxItems: number;
   isLoading: boolean;
   isSyncing: boolean;
   lastSyncedAt: Date | null;
-  craft: (item: CS2EconomyItem, attributes?: Partial<CraftAttributes>) => void;
-  edit: (uid: number, attributes: Partial<CraftAttributes>) => void;
-  remove: (uid: number) => void;
-  equip: (uid: number, team?: CS2Team) => void;
-  unequip: (uid: number, team?: CS2Team) => void;
+  loadError: string | null;
+  isAuthenticated: boolean;
+  craft: (item: CS2EconomyItem, attributes?: Partial<CraftAttributes>) => Promise<boolean>;
+  replaceMusicKit: (item: CS2EconomyItem) => Promise<boolean>;
+  removeMusicKit: () => Promise<boolean>;
+  edit: (uid: number, attributes: Partial<CraftAttributes>) => Promise<boolean>;
+  remove: (uid: number) => Promise<boolean>;
+  equip: (uid: number, team?: CS2Team) => Promise<boolean>;
+  unequip: (uid: number, team?: CS2Team) => Promise<boolean>;
   applySticker: (
     targetUid: number,
     stickerId: number,
     slot: number,
     options?: { wear?: number; x?: number; y?: number; rotation?: number },
-  ) => void;
-  scrapeSticker: (targetUid: number, slot: number) => void;
+  ) => Promise<boolean>;
+  scrapeSticker: (targetUid: number, slot: number) => Promise<boolean>;
   applyKeychain: (
     targetUid: number,
     keychainId: number,
     options?: { x?: number; y?: number; z?: number; seed?: number },
-  ) => void;
-  detachKeychain: (targetUid: number) => void;
-  unlockCase: (caseItem: CS2EconomyItem) => CS2EconomyItem | null;
-  clearInventory: () => void;
+  ) => Promise<boolean>;
+  detachKeychain: (targetUid: number) => Promise<boolean>;
+  clearInventory: () => Promise<boolean>;
   syncNow: () => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | null>(null);
+
+const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+
+function isTransientInventoryFailure(error: unknown): boolean {
+  // Fetch rejects network interruptions as a TypeError. API failures are safe
+  // to retry only when the server reports a transient 5xx condition.
+  return !(error instanceof ApiError) || error.status >= 500;
+}
+
+async function retryInventoryRequest<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    if (!isTransientInventoryFailure(error)) throw error;
+    await delay(350);
+    return request();
+  }
+}
+
+function inventoryFailureMessage(error: unknown, action: "load" | "sync" | "save"): string {
+  if (error instanceof ApiError && error.status === 429) {
+    return "O inventário recebeu muitas solicitações. Aguarde alguns segundos e tente novamente.";
+  }
+  if (error instanceof ApiError && error.status === 401) {
+    return "Não foi possível renovar sua sessão. Atualize a página e tente novamente.";
+  }
+  if (error instanceof ApiError && error.status === 403) {
+    return "O servidor recusou esta alteração. Atualize o inventário e tente novamente.";
+  }
+  if (action === "load") return "Não foi possível carregar o inventário confirmado pelo servidor.";
+  if (action === "sync") return "Não foi possível atualizar o inventário confirmado pelo servidor.";
+  return "O servidor não confirmou a alteração do inventário.";
+}
 
 export function useKurageInventory() {
   const context = useContext(InventoryContext);
@@ -100,111 +136,127 @@ export function useKurageInventory() {
 }
 
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [inventory, setInventory] = useState<CS2Inventory>(
     () => new CS2Inventory({ maxItems: 1000 }),
   );
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const mutationInFlightRef = useRef(false);
 
-  // Initialize from LocalStorage or Backend
+  const createInventory = useCallback((data?: CS2InventoryData) => {
+    return new CS2Inventory({ data, maxItems: 1000 });
+  }, []);
+
+  // The backend is the sole source of truth. Legacy browser-only inventories are
+  // deliberately discarded instead of being shown or silently uploaded.
   useEffect(() => {
-    async function loadInitial() {
-      let initialData: any = undefined;
+    let cancelled = false;
 
-      // 1. Try local storage first
+    async function loadConfirmedInventory() {
+      if (isAuthLoading) return;
+
+      setIsLoading(true);
+      setLoadError(null);
+
+      if (!isAuthenticated) {
+        localStorage.removeItem("kurage_cs2_inventory_v1");
+        if (!cancelled) {
+          setInventory(createInventory());
+          setLastSyncedAt(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       try {
-        const local = localStorage.getItem(STORAGE_KEY);
-        if (local) {
-          initialData = JSON.parse(local);
+        const confirmedInventory = await retryInventoryRequest(() => api.get<CS2InventoryData>("/inventory/me"));
+        if (!cancelled) {
+          setInventory(createInventory(confirmedInventory));
+          setLastSyncedAt(new Date());
         }
-      } catch {
-        // ignore
-      }
-
-      // 2. If authenticated, try fetching from backend
-      if (isAuthenticated) {
-        try {
-          const res = await api.get<any>("/inventory/me");
-          if (
-            res &&
-            ((Array.isArray(res) && res.length > 0) ||
-              (typeof res === "object" && Object.keys(res).length > 0))
-          ) {
-            initialData = res;
-          }
-        } catch {
-          // fallback to local
+      } catch (error) {
+        if (!cancelled) {
+          setInventory(createInventory());
+          setLoadError(inventoryFailureMessage(error, "load"));
         }
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-
-      const inv = new CS2Inventory({
-        data: initialData,
-        maxItems: 1000,
-      });
-
-      setInventory(inv);
-      setIsLoading(false);
     }
 
-    loadInitial();
-  }, [isAuthenticated]);
+    void loadConfirmedInventory();
+    return () => {
+      cancelled = true;
+    };
+  }, [createInventory, isAuthenticated, isAuthLoading]);
 
-  // Persist locally & debounced sync with backend
-  const persistAndSync = useCallback(
-    (newInv: CS2Inventory) => {
-      const cloned = newInv.move();
-      setInventory(cloned);
-
-      try {
-        const rawJson = cloned.getData();
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(rawJson));
-      } catch {
-        // ignore storage error
-      }
-
-      if (isAuthenticated) {
-        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-        syncTimeoutRef.current = setTimeout(async () => {
-          setIsSyncing(true);
-          try {
-            const rawJson = cloned.getData();
-            await api.put("/inventory/me", { items: rawJson });
-            setLastSyncedAt(new Date());
-          } catch {
-            // sync failed
-          } finally {
-            setIsSyncing(false);
-          }
-        }, 1200);
-      }
-    },
-    [isAuthenticated],
+  const cloneInventory = useCallback(
+    (source: CS2Inventory) => createInventory(source.getData()),
+    [createInventory],
   );
 
-  // Manual immediate sync
+  const persistConfirmedInventory = useCallback(
+    async (candidate: CS2Inventory): Promise<boolean> => {
+      if (!isAuthenticated) {
+        toast.error("Entre com a Steam para alterar seu inventário.");
+        return false;
+      }
+      if (mutationInFlightRef.current) {
+        toast.info("Aguarde a confirmação da alteração anterior.");
+        return false;
+      }
+
+      mutationInFlightRef.current = true;
+      setIsSyncing(true);
+      try {
+        const confirmedInventory = await retryInventoryRequest(() => api.put<CS2InventoryData>("/inventory/me", {
+          items: candidate.getData(),
+        }));
+        setInventory(createInventory(confirmedInventory));
+        setLastSyncedAt(new Date());
+        setLoadError(null);
+        return true;
+      } catch (error) {
+        toast.error(inventoryFailureMessage(error, "save"));
+        return false;
+      } finally {
+        mutationInFlightRef.current = false;
+        setIsSyncing(false);
+      }
+    },
+    [createInventory, isAuthenticated],
+  );
+
+  // Refreshes from the server; it never uploads a browser-only state.
   const syncNow = useCallback(async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || mutationInFlightRef.current) return;
+
+    mutationInFlightRef.current = true;
     setIsSyncing(true);
     try {
-      const rawJson = inventory.getData();
-      await api.put("/inventory/me", { items: rawJson });
+      const confirmedInventory = await retryInventoryRequest(() => api.get<CS2InventoryData>("/inventory/me"));
+      setInventory(createInventory(confirmedInventory));
       setLastSyncedAt(new Date());
-    } catch {
-      // ignore
+      setLoadError(null);
+    } catch (error) {
+      const message = inventoryFailureMessage(error, "sync");
+      setLoadError(message);
+      toast.error(message);
     } finally {
+      mutationInFlightRef.current = false;
       setIsSyncing(false);
     }
-  }, [isAuthenticated, inventory]);
+  }, [createInventory, isAuthenticated]);
 
   // Helper to sanitize payload against CS2 item capabilities
   const sanitizeAttributes = (
     item: CS2EconomyItem,
     attributes?: Partial<CraftAttributes>,
   ) => {
-    const payload: any = { id: item.id };
+    const payload: CS2BaseInventoryItem = { id: item.id };
 
     if (
       typeof item.hasWear === "function" &&
@@ -263,29 +315,69 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   };
 
   // ── Actions ──
-  const craft = useCallback(
-    (item: CS2EconomyItem, attributes?: Partial<CraftAttributes>) => {
+  const replaceMusicKit = useCallback(
+    async (item: CS2EconomyItem) => {
+      if (!item.isMusicKit()) {
+        toast.error("Este item não é um kit de música.");
+        return false;
+      }
+
       try {
+        const candidate = cloneInventory(inventory);
+        replaceMusicKitSlot(candidate, item);
+        return await persistConfirmedInventory(candidate);
+      } catch (err) {
+        console.error("Error replacing music kit:", err);
+        toast.error("Não foi possível atualizar seu kit de música.");
+        return false;
+      }
+    },
+    [cloneInventory, inventory, persistConfirmedInventory],
+  );
+
+  const removeMusicKit = useCallback(async () => {
+    try {
+      const candidate = cloneInventory(inventory);
+      if (!removeMusicKitSlot(candidate)) return true;
+      return await persistConfirmedInventory(candidate);
+    } catch (err) {
+      console.error("Error removing music kit:", err);
+      toast.error("Não foi possível remover seu kit de música.");
+      return false;
+    }
+  }, [cloneInventory, inventory, persistConfirmedInventory]);
+
+  const craft = useCallback(
+    async (item: CS2EconomyItem, attributes?: Partial<CraftAttributes>) => {
+      if (item.isMusicKit()) {
+        return replaceMusicKit(item);
+      }
+
+      try {
+        const candidate = cloneInventory(inventory);
         const payload = sanitizeAttributes(item, attributes);
         const quantity = attributes?.quantity || 1;
         for (let i = 0; i < quantity; i++) {
-          inventory.add(payload);
+          candidate.add(payload);
         }
-        persistAndSync(inventory);
+        return await persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error crafting item:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return false;
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory, replaceMusicKit],
   );
 
   const edit = useCallback(
-    (uid: number, attributes: Partial<CraftAttributes>) => {
+    async (uid: number, attributes: Partial<CraftAttributes>) => {
       try {
-        const existing = inventory.get(uid);
-        if (!existing) return;
+        const candidate = cloneInventory(inventory);
+        const existing = candidate.get(uid);
+        if (!existing) return false;
 
-        const editPayload: any = {};
+        const editPayload: Partial<CS2BaseInventoryItem> = {};
         if (
           typeof existing.hasWear === "function" &&
           existing.hasWear() &&
@@ -344,63 +436,74 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
               : undefined;
         }
 
-        inventory.edit(uid, editPayload);
-        persistAndSync(inventory);
+        candidate.edit(uid, editPayload);
+        return await persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error editing item:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return false;
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory],
   );
 
   const remove = useCallback(
-    (uid: number) => {
+    async (uid: number) => {
       try {
-        inventory.remove(uid);
-        persistAndSync(inventory);
+        const candidate = cloneInventory(inventory);
+        candidate.remove(uid);
+        return await persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error removing item:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return false;
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory],
   );
 
   const equip = useCallback(
-    (uid: number, team?: CS2Team) => {
+    async (uid: number, team?: CS2Team) => {
       try {
-        const target = inventory.get(uid);
-        if (!target) return;
+        const candidate = cloneInventory(inventory);
+        const target = candidate.get(uid);
+        if (!target) return false;
 
         if (team !== undefined) {
-          const teams = (target as any).teams as CS2Team[] | undefined;
+          const teams = target.teams as CS2Team[] | undefined;
           if (
             Array.isArray(teams) &&
             teams.length > 0 &&
             !teams.includes(team)
           ) {
-            return;
+            return false;
           }
         }
 
-        inventory.equip(uid, team);
-        persistAndSync(inventory);
+        candidate.equip(uid, team);
+        return await persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error equipping item:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return false;
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory],
   );
 
   const unequip = useCallback(
-    (uid: number, team?: CS2Team) => {
+    async (uid: number, team?: CS2Team) => {
       try {
-        inventory.unequip(uid, team);
-        persistAndSync(inventory);
+        const candidate = cloneInventory(inventory);
+        candidate.unequip(uid, team);
+        return await persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error unequipping item:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return false;
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory],
   );
 
   const applySticker = useCallback(
@@ -411,8 +514,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       options?: { wear?: number; x?: number; y?: number; rotation?: number },
     ) => {
       try {
-        const item = inventory.get(targetUid);
-        if (!item) return;
+        const candidate = cloneInventory(inventory);
+        const item = candidate.get(targetUid);
+        if (!item) return Promise.resolve(false);
         const currentStickers = item.stickers
           ? Object.fromEntries(item.stickers)
           : {};
@@ -423,23 +527,26 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
           y: options?.y,
           rotation: options?.rotation,
         };
-        inventory.edit(targetUid, { stickers: currentStickers });
-        persistAndSync(inventory);
+        candidate.edit(targetUid, { stickers: currentStickers });
+        return persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error applying sticker:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return Promise.resolve(false);
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory],
   );
 
   const scrapeSticker = useCallback(
     (targetUid: number, slot: number) => {
       try {
-        const item = inventory.get(targetUid);
-        if (!item || !item.stickers) return;
+        const candidate = cloneInventory(inventory);
+        const item = candidate.get(targetUid);
+        if (!item || !item.stickers) return Promise.resolve(false);
         const currentStickers = Object.fromEntries(item.stickers);
         const currentSticker = currentStickers[slot];
-        if (!currentSticker) return;
+        if (!currentSticker) return Promise.resolve(false);
 
         const currentWear = currentSticker.wear || 0;
         const nextWear = currentWear + 0.15;
@@ -448,13 +555,15 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         } else {
           currentStickers[slot] = { ...currentSticker, wear: nextWear };
         }
-        inventory.edit(targetUid, { stickers: currentStickers });
-        persistAndSync(inventory);
+        candidate.edit(targetUid, { stickers: currentStickers });
+        return persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error scraping sticker:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return Promise.resolve(false);
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory],
   );
 
   const applyKeychain = useCallback(
@@ -464,9 +573,10 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       options?: { x?: number; y?: number; z?: number; seed?: number },
     ) => {
       try {
-        const item = inventory.get(targetUid);
-        if (!item) return;
-        const currentKeychains: Record<string, any> = {};
+        const candidate = cloneInventory(inventory);
+        const item = candidate.get(targetUid);
+        if (!item) return Promise.resolve(false);
+        const currentKeychains: NonNullable<CS2BaseInventoryItem["keychains"]> = {};
         currentKeychains[0] = {
           id: keychainId,
           x: options?.x,
@@ -474,77 +584,72 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
           z: options?.z,
           seed: options?.seed,
         };
-        inventory.edit(targetUid, { keychains: currentKeychains });
-        persistAndSync(inventory);
+        candidate.edit(targetUid, { keychains: currentKeychains });
+        return persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error applying keychain:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return Promise.resolve(false);
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory],
   );
 
   const detachKeychain = useCallback(
     (targetUid: number) => {
       try {
-        inventory.edit(targetUid, { keychains: {} });
-        persistAndSync(inventory);
+        const candidate = cloneInventory(inventory);
+        candidate.edit(targetUid, { keychains: {} });
+        return persistConfirmedInventory(candidate);
       } catch (err) {
         console.error("Error detaching keychain:", err);
+        toast.error("Não foi possível preparar a alteração do inventário.");
+        return Promise.resolve(false);
       }
     },
-    [inventory, persistAndSync],
+    [cloneInventory, inventory, persistConfirmedInventory],
   );
 
-  const unlockCase = useCallback(
-    (caseItem: CS2EconomyItem) => {
-      try {
-        // Unlock random item from container contents
-        const contents = caseItem.contents;
-        if (contents && contents.length > 0) {
-          const winner = contents[Math.floor(Math.random() * contents.length)];
-          inventory.add({
-            id: winner.id,
-            wear: winner.hasWear() ? Math.random() * 0.4 : undefined,
-            seed: winner.hasSeed()
-              ? Math.floor(Math.random() * 1000)
-              : undefined,
-          });
-          persistAndSync(inventory);
-          return winner;
-        }
-      } catch (err) {
-        console.error("Error unlocking container:", err);
-      }
-      return null;
-    },
-    [inventory, persistAndSync],
-  );
-
-  const clearInventory = useCallback(() => {
+  const clearInventory = useCallback(async () => {
     try {
-      inventory.removeAll();
-      persistAndSync(inventory);
+      const candidate = cloneInventory(inventory);
+      candidate.removeAll();
+      return await persistConfirmedInventory(candidate);
     } catch (err) {
       console.error("Error clearing inventory:", err);
+      toast.error("Não foi possível preparar a alteração do inventário.");
+      return false;
     }
-  }, [inventory, persistAndSync]);
+  }, [cloneInventory, inventory, persistConfirmedInventory]);
 
   // Transformed items
-  const items: TransformedInventoryItem[] = inventory
+  const customItems = inventory
     .getAll()
+    .filter((item) => !item.isDefault);
+  const items: TransformedInventoryItem[] = customItems
+    .filter((item) => !item.isMusicKit())
     .map(transformItem);
+  const musicKit = customItems
+    .filter((item) => item.isMusicKit())
+    .sort((a, b) => Number(Boolean(b.equipped)) - Number(Boolean(a.equipped)))
+    .map(transformItem)[0] ?? null;
 
   return (
     <InventoryContext.Provider
       value={{
         inventory,
         items,
+        musicKit,
         itemCount: items.length,
         maxItems: inventory.options.maxItems || 1000,
         isLoading,
         isSyncing,
         lastSyncedAt,
+        loadError,
+        isAuthenticated,
         craft,
+        replaceMusicKit,
+        removeMusicKit,
         edit,
         remove,
         equip,
@@ -553,7 +658,6 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         scrapeSticker,
         applyKeychain,
         detachKeychain,
-        unlockCase,
         clearInventory,
         syncNow,
       }}

@@ -12,6 +12,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
+    document.title = "Kurage · Erro inesperado";
     console.error("Global application error caught by boundary:", error);
   }, [error]);
 

@@ -43,12 +43,14 @@ class InventoryControllerTest {
     }
 
     @Test
-    void missingInventorySerializesAsAnEmptyJsonObject() throws Exception {
+    void missingInventorySerializesAsTheCanonicalEmptyInventory() throws Exception {
         when(userRepository.findBySteamId64(STEAM_ID)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/inventory/{steamId64}", STEAM_ID))
                 .andExpect(status().isOk())
-                .andExpect(content().json("{}"));
+                .andExpect(content().json("""
+                        {"version":2,"items":{}}
+                        """));
     }
 
     @Test
@@ -60,7 +62,9 @@ class InventoryControllerTest {
 
         var persistedItems = new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
                 {
-                  "730": {"name": "AK-47", "equipped": true},
+                  "items": {
+                    "730": {"id": 7, "equippedCT": true}
+                  },
                   "version": 2
                 }
                 """);
@@ -75,7 +79,9 @@ class InventoryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().json("""
                         {
-                          "730": {"name": "AK-47", "equipped": true},
+                          "items": {
+                            "730": {"id": 7, "equippedCT": true}
+                          },
                           "version": 2
                         }
                         """));

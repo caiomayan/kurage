@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
 import { PlayerPassportHovercard } from "@/components/ui/PlayerPassportHovercard";
@@ -12,7 +12,7 @@ interface AvatarProps {
   src?: string | null;
   alt?: string;
   username?: string;
-  kurageId?: number;
+  kurageId?: number | string | null;
   size?: AvatarSize;
   level?: number;
   isVerifiedPro?: boolean;
@@ -40,18 +40,17 @@ export function Avatar({
   className,
   enableHovercard = true,
 }: AvatarProps) {
-  const [hasError, setHasError] = useState(false);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
   const currentSize = sizeMap[size];
   const imgRef = useRef<HTMLImageElement | null>(null);
+  const numericKurageId =
+    typeof kurageId === "number"
+      ? kurageId
+      : typeof kurageId === "string" && /^\d+$/.test(kurageId)
+        ? Number(kurageId)
+        : undefined;
 
-  useEffect(() => {
-    setHasError(false);
-    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth === 0) {
-      setHasError(true);
-    }
-  }, [src]);
-
-  const hasValidImage = Boolean(src && src.trim() !== "" && !hasError);
+  const hasValidImage = Boolean(src && src.trim() !== "" && failedSource !== src);
 
   const avatarElement = (
     <div
@@ -71,10 +70,10 @@ export function Avatar({
             loading="eager"
             decoding="async"
             referrerPolicy="no-referrer"
-            onError={() => setHasError(true)}
+            onError={() => setFailedSource(src ?? null)}
             onLoad={(e) => {
               if ((e.currentTarget as HTMLImageElement).naturalWidth === 0) {
-                setHasError(true);
+                setFailedSource(src ?? null);
               }
             }}
             className="h-full w-full object-cover"
@@ -113,7 +112,7 @@ export function Avatar({
         username={username}
         avatarUrl={src}
         initialData={{
-          kurageId: typeof kurageId === "number" ? kurageId : undefined,
+          kurageId: numericKurageId,
           username,
           avatarUrl: src,
           isVerifiedPro,

@@ -8,19 +8,20 @@ import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
 import { FaceitLevelIcon } from "@/components/ui/faceit-levels/FaceitLevelIcon";
 import { SteamIcon, FaceitIcon } from "@/components/ui/PlatformIcons";
 import { PlayerRankingSnapshot } from "./PlayerRankingSnapshot";
+import { VerifiedProBadge } from "@/components/ui/VerifiedProBadge";
 import type { UserWithStats } from "@/types/user";
 
 interface PlayerProfileHeaderProps {
   user: UserWithStats;
   faceitLevel?: number | null;
-  currentRank?: number;
+  currentRank?: number | null;
   rankDelta?: number;
 }
 
 export function PlayerProfileHeader({
   user,
   faceitLevel = null,
-  currentRank = 1,
+  currentRank = null,
   rankDelta = 0,
 }: PlayerProfileHeaderProps) {
   const kurageLevel = user.stats?.kurageLevel ?? 0;
@@ -30,25 +31,28 @@ export function PlayerProfileHeader({
       {/* 1. Row with Centered Avatar and Left-Flush Horizontal Ranking Feedback */}
       <div className="relative flex items-center justify-center w-full min-h-[160px] sm:min-h-[192px]">
         {/* Vertical Subtle Ranking Ladder flush against the top-right margin */}
-        <div className="hidden lg:block absolute right-0 top-0">
-          <PlayerRankingSnapshot
-            currentRank={currentRank}
+        {currentRank != null && currentRank > 0 && (
+          <div className="hidden lg:block absolute right-0 top-0">
+            <PlayerRankingSnapshot
+              currentRank={currentRank}
             player={{
               kurageId: user.kurageId,
               username: user.username,
               avatarUrl: user.avatarUrl,
               country: user.country,
-              kurageElo: user.stats?.kurageElo || 2000,
+              kurageElo: user.stats?.kurageElo,
               isVerifiedPro: user.isVerifiedPro,
             }}
             rankDelta={rankDelta}
-          />
-        </div>
+            />
+          </div>
+        )}
 
         {/* Main Imposing Centered Avatar */}
         <Avatar
           src={user.avatarUrl}
           username={user.username}
+          kurageId={user.kurageId}
           size="2xl"
           isVerifiedPro={user.isVerifiedPro}
           className="w-40 h-40 sm:w-48 sm:h-48 rounded-full object-cover shadow-[0_20px_60px_rgba(0,0,0,0.9)] select-none"
@@ -56,10 +60,11 @@ export function PlayerProfileHeader({
       </div>
 
       {/* 2. Username in Editorial EB Garamond Font */}
-      <div className="mt-7 flex items-center justify-center">
+      <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
         <h1 className="font-display text-[44px] sm:text-[56px] font-bold text-white tracking-tight leading-none select-text">
           {user.username}
         </h1>
+        <VerifiedProBadge subscriptionTier={user.subscriptionTier} />
       </div>
 
       {/* 3. Unified Tactical & Platform Badges (All expand-on-hover without backgrounds) */}
@@ -99,9 +104,9 @@ export function PlayerProfileHeader({
         )}
 
         {/* Faceit Clickable Icon (No background, expands on hover) */}
-        {(user.faceitUsername || user.steamId64) && (
+        {user.faceitUsername && (
           <a
-            href={user.faceitUsername ? `https://www.faceit.com/en/players/${user.faceitUsername}` : `https://www.faceit.com/en/players/${user.username}`}
+            href={`https://www.faceit.com/en/players/${user.faceitUsername}`}
             target="_blank"
             rel="noopener noreferrer"
             className="group/faceit inline-flex items-center gap-0 overflow-hidden rounded-full transition-all duration-300 cursor-pointer p-0.5 hover:bg-white/10 shrink-0 text-mute hover:text-[#ff5500]"
@@ -116,20 +121,22 @@ export function PlayerProfileHeader({
       </div>
 
       {/* Mobile Subtle Ranking Feedback */}
-      <div className="block lg:hidden mt-5">
-        <PlayerRankingSnapshot
-          currentRank={currentRank}
+      {currentRank != null && currentRank > 0 && (
+        <div className="block lg:hidden mt-5">
+          <PlayerRankingSnapshot
+            currentRank={currentRank}
           player={{
             kurageId: user.kurageId,
             username: user.username,
             avatarUrl: user.avatarUrl,
             country: user.country,
-            kurageElo: user.stats?.kurageElo || 2000,
+            kurageElo: user.stats?.kurageElo,
             isVerifiedPro: user.isVerifiedPro,
           }}
           rankDelta={rankDelta}
-        />
-      </div>
+          />
+        </div>
+      )}
     </div>
   );
 }

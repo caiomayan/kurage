@@ -8,13 +8,16 @@ import {
 } from "@ianlucas/cs2-lib";
 import { brazilian } from "@ianlucas/cs2-lib/translations/brazilian";
 import { generateInspectLink, parseInspectLink } from "@ianlucas/cs2-lib-inspect";
-import { ECONOMY_CATEGORIES, getBaseItems, getPaidItems, getAllPaidItems } from "../lib/inventory/economy-filters.ts";
+import { ECONOMY_CATEGORIES, getCraftableItems, getAllCraftableItems, getMusicKits } from "../lib/inventory/economy-filters.ts";
+import { removeMusicKitSlot, replaceMusicKitSlot } from "../lib/inventory/inventory-music-kit.ts";
 import { parseItemName, getItemImage } from "../lib/inventory/economy-naming.ts";
+import { searchEconomyItems } from "../lib/inventory/economy-search.ts";
+import { buildViewerSource, toViewerItem } from "../lib/inventory/viewer-api.ts";
 
 CS2Economy.load({ items: CS2_ITEMS, language: brazilian });
 
-describe("CS2 Inventory Simulator & Engine", () => {
-  test("1. Economy DB Initialization: items, weapons, and containers are loaded", () => {
+describe("Kurage Inventory Engine", () => {
+  test("1. Economy DB Initialization: items and weapons are loaded", () => {
     assert.ok(CS2Economy.itemsAsArray.length > 0, "Economy must have items loaded");
     const ak47 = CS2Economy.itemsAsArray.find((it) => it.name.includes("AK-47") && !it.isDefault);
     assert.ok(ak47, "AK-47 skin must exist in economy DB");
@@ -123,20 +126,24 @@ describe("CS2 Inventory Simulator & Engine", () => {
     assert.equal(parsed.seed, 420);
   });
 
-  test("7. Hierarchical Economy Taxonomy & Filter Helpers", () => {
-    const rifleCat = ECONOMY_CATEGORIES.find((c) => c.id === "rifle");
-    assert.ok(rifleCat);
+  test("7. Product Taxonomy exposes only user-creatable inventory categories", () => {
+    assert.deepEqual(
+      ECONOMY_CATEGORIES.map((category) => category.id),
+      ["skins", "knives", "gloves", "agents"],
+    );
 
-    const baseRifles = getBaseItems(rifleCat);
-    assert.ok(baseRifles.length > 0, "Base rifles list must not be empty");
-    const ak47Base = baseRifles.find((r) => r.name.includes("AK-47"));
-    assert.ok(ak47Base, "Base AK-47 must exist in base rifles");
+    const skinsCategory = ECONOMY_CATEGORIES.find((category) => category.id === "skins");
+    assert.ok(skinsCategory);
+    const skins = getCraftableItems(skinsCategory);
+    assert.ok(skins.length > 100, "Unified skins catalog must be comprehensive");
+    assert.ok(skins.every((item) => item.isWeapon() && !item.isDefault && !item.isBase));
 
-    const akSkins = getPaidItems(rifleCat, "ak47");
-    assert.ok(akSkins.length > 5, "AK-47 must have multiple paint finishes");
-
-    const allItems = getAllPaidItems();
-    assert.ok(allItems.length > 100, "All items search space must be comprehensive");
+    const allItems = getAllCraftableItems();
+    assert.ok(allItems.length > 100, "Complete creation catalog must be comprehensive");
+    assert.ok(allItems.every((item) => !item.isDefault && !item.isBase));
+    assert.ok(allItems.every((item) => !item.isSticker() && !item.isKeychain()));
+    assert.ok(allItems.every((item) => !item.isMusicKit()));
+    assert.ok(getMusicKits().every((item) => item.isMusicKit()));
   });
 
   test("8. Weapon and Skin Name Parsing & Image Resolution", () => {
@@ -187,5 +194,73 @@ describe("CS2 Inventory Simulator & Engine", () => {
     };
     inv.add(skinPayload);
     assert.equal(inv.size(), 2);
+  });
+
+  test("10. Catalog search finds weapons, finishes, punctuation variants, and close spelling", () => {
+    const skins = getCraftableItems(ECONOMY_CATEGORIES[0]);
+    const ak47 = searchEconomyItems(skins, "ak47");
+    assert.ok(ak47.some((item) => parseItemName(item).weaponName === "AK-47"));
+
+    const asiimov = searchEconomyItems(skins, "asiimov");
+    assert.ok(asiimov.some((item) => parseItemName(item).skinName.toLowerCase().includes("asiimov")));
+
+    const typo = searchEconomyItems(skins, "asiimovv");
+    assert.ok(typo.some((item) => parseItemName(item).skinName.toLowerCase().includes("asiimov")));
+
+    const englishKnife = searchEconomyItems(getCraftableItems(ECONOMY_CATEGORIES[1]), "bayonet");
+    assert.ok(englishKnife.some((item) => item.modelKey === "bayonet"));
+  });
+
+  test("11. Every craftable catalog item is accepted by the inventory engine", () => {
+    for (const category of ECONOMY_CATEGORIES) {
+      const categoryItems = getCraftableItems(category);
+      assert.ok(categoryItems.length > 0, `${category.label} must expose craftable items`);
+
+      for (const item of categoryItems) {
+        const inventory = new CS2Inventory({ maxItems: 1000 });
+        assert.doesNotThrow(() => inventory.add({
+          id: item.id,
+          wear: item.hasWear() ? item.wearMin : undefined,
+          seed: item.hasSeed() ? 420 : undefined,
+        }), `${category.label}: ${item.name} must be accepted by the CS2 inventory engine`);
+        assert.equal(inventory.size(), 1);
+      }
+    }
+  });
+
+  test("12. 3D viewer payload preserves sticker and keychain placement", () => {
+    const weapon = CS2Economy.itemsAsArray.find((item) => item.isWeapon() && item.hasStickers() && item.hasKeychains());
+    assert.ok(weapon);
+    const payload = {
+      id: weapon.id,
+      ...(weapon.hasWear() ? { wear: weapon.wearMin } : {}),
+      stickers: { 0: { id: 1, schema: 2, x: 0.1, y: -0.2, rotation: 45, wear: 0.15 } },
+      keychains: { 0: { id: 1, seed: 77, x: 0.01, y: 0.02, z: 0.03 } },
+    };
+    assert.deepEqual(toViewerItem(payload), payload);
+    const source = new URL(buildViewerSource(payload));
+    assert.equal(source.origin, "https://3d.cstrike.app");
+    assert.equal(source.searchParams.get("bg"), "0");
+    assert.equal(source.searchParams.get("halfRotation"), "1");
+    assert.deepEqual(JSON.parse(source.searchParams.get("item")), payload);
+  });
+
+  test("13. Music kit behaves as one automatically equipped slot", () => {
+    const kits = getMusicKits();
+    assert.ok(kits.length > 1);
+    const inventory = new CS2Inventory({ maxItems: 1000 });
+
+    const firstUid = replaceMusicKitSlot(inventory, kits[0]);
+    assert.equal(inventory.getAll().filter((item) => item.isMusicKit()).length, 1);
+    assert.equal(Boolean(inventory.get(firstUid).equipped), true);
+
+    const replacementUid = replaceMusicKitSlot(inventory, kits[1]);
+    const installedKits = inventory.getAll().filter((item) => item.isMusicKit());
+    assert.equal(installedKits.length, 1);
+    assert.equal(installedKits[0].id, kits[1].id);
+    assert.equal(Boolean(inventory.get(replacementUid).equipped), true);
+
+    assert.equal(removeMusicKitSlot(inventory), true);
+    assert.equal(inventory.getAll().filter((item) => item.isMusicKit()).length, 0);
   });
 });

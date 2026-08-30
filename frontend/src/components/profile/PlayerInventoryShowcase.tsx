@@ -5,11 +5,6 @@ import Image from "next/image";
 import {
   PiShield,
   PiSkull,
-  PiSword,
-  PiHand,
-  PiUser,
-  PiMusicNotes,
-  PiMedal,
   PiSparkle,
   PiEye,
   PiCopy,
@@ -18,8 +13,10 @@ import {
   PiSquaresFour,
   PiShieldCheck,
   PiCheck,
+  PiWarningCircle,
+  PiArrowClockwise,
 } from "react-icons/pi";
-import { CS2Inventory, CS2Team } from "@ianlucas/cs2-lib";
+import { CS2Inventory, CS2InventoryData, CS2Team } from "@ianlucas/cs2-lib";
 import { generateInspectLink } from "@ianlucas/cs2-lib-inspect";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -40,6 +37,8 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
   const { craft, items: localOwnerItems } = useKurageInventory();
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [items, setItems] = useState<TransformedInventoryItem[]>([]);
   const [viewMode, setViewMode] = useState<"loadout" | "grid">("loadout");
   const [selectedTeam, setSelectedTeam] = useState<CS2Team>(CS2Team.CT);
@@ -51,23 +50,26 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
       // If profile owner and we already have items locally, use them
       if (isOwner && localOwnerItems.length > 0) {
         setItems(localOwnerItems);
+        setLoadError(false);
         setLoading(false);
         return;
       }
 
       try {
         setLoading(true);
-        const data = await api.get<any>(`/inventory/${steamId64}`);
+        setLoadError(false);
+        setItems([]);
+        const data = await api.get<CS2InventoryData>(`/inventory/${steamId64}`);
         if (data && ((Array.isArray(data) && data.length > 0) || (typeof data === "object" && Object.keys(data).length > 0))) {
           const inv = new CS2Inventory({ data, maxItems: 1000 });
-          const rawItems = inv.getAll();
+          const rawItems = inv.getAll().filter((item) => !item.isDefault);
           const transformed = rawItems.map(transformItem);
           setItems(transformed);
         } else {
           setItems([]);
         }
       } catch {
-        setItems([]);
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
@@ -76,7 +78,7 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
     if (steamId64) {
       loadShowcase();
     }
-  }, [steamId64, isOwner, localOwnerItems]);
+  }, [steamId64, isOwner, localOwnerItems, reloadNonce]);
 
   // Copy inspect command to clipboard
   const handleCopyInspect = (itemData: TransformedInventoryItem, e: React.MouseEvent) => {
@@ -93,7 +95,7 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
   };
 
   // Clone skin to visitor's own inventory
-  const handleCloneSkin = (itemData: TransformedInventoryItem, e: React.MouseEvent) => {
+  const handleCloneSkin = async (itemData: TransformedInventoryItem, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAuthenticated) {
       toast.error("Faça login com a Steam para adicionar skins ao seu inventário.");
@@ -102,13 +104,15 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
 
     try {
       const parsed = parseItemName(itemData.item);
-      craft(itemData.item, {
+      const saved = await craft(itemData.item, {
         wear: itemData.item.wear,
         seed: itemData.item.seed,
         stattrak: itemData.item.statTrak !== undefined,
         nameTag: itemData.item.nameTag,
       });
-      toast.success(`${parsed.weaponName} | ${parsed.skinName} clonada para o seu inventário!`);
+      if (saved) {
+        toast.success(`${parsed.weaponName} | ${parsed.skinName} clonada e confirmada pelo servidor!`);
+      }
     } catch {
       toast.error("Erro ao clonar skin.");
     }
@@ -135,8 +139,32 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
   if (loading) {
     return (
       <div className="py-24 rounded-[24px] bg-[#060a0d]/90 backdrop-blur-2xl border border-white/[0.08] flex flex-col items-center justify-center gap-3">
-        <PiSpinnerGap className="w-7 h-7 animate-spin text-[#a9c8c0]" />
+        <PiSpinnerGap className="w-7 h-7 animate-spin text-[var(--kurage-accent)]" />
         <span className="text-[13px] font-sans text-stone-400">Carregando inventário de skins...</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-[24px] border border-white/[0.08] bg-[#060a0d]/90 px-8 py-20 text-center shadow-xl backdrop-blur-2xl">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#d7a57f]/20 bg-[#d7a57f]/10 text-[#d7a57f]">
+          <PiWarningCircle className="h-6 w-6" aria-hidden />
+        </div>
+        <div className="flex max-w-md flex-col gap-1">
+          <h3 className="font-display text-[18px] font-bold tracking-tight text-white">Inventário temporariamente indisponível</h3>
+          <p className="text-[13px] leading-relaxed text-stone-400">
+            Não foi possível confirmar os itens deste jogador. Isso não significa que o inventário esteja vazio.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setReloadNonce((value) => value + 1)}
+          className="mt-2 flex h-9 items-center gap-2 rounded-[8px] border border-white/[0.1] bg-white/[0.06] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-white/[0.1]"
+        >
+          <PiArrowClockwise className="h-4 w-4" aria-hidden />
+          Tentar novamente
+        </button>
       </div>
     );
   }
@@ -145,7 +173,7 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
     return (
       <div className="py-20 rounded-[24px] bg-[#060a0d]/90 backdrop-blur-2xl border border-white/[0.08] p-8 flex flex-col items-center justify-center text-center gap-4 shadow-xl">
         <div className="w-12 h-12 rounded-full bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-stone-400">
-          <PiSparkle className="w-6 h-6 text-[#a9c8c0]" />
+          <PiSparkle className="w-6 h-6 text-[var(--kurage-accent)]" />
         </div>
         <div className="flex flex-col gap-1 max-w-md">
           <h3 className="font-display text-[18px] font-bold text-white tracking-tight">
@@ -183,7 +211,7 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
               className={cn(
                 "flex items-center gap-2 px-3.5 py-1.5 rounded-[7px] text-[12px] font-sans font-semibold transition-all cursor-pointer",
                 viewMode === "loadout"
-                  ? "bg-[#a9c8c0] text-black shadow-sm font-bold"
+                  ? "bg-[var(--kurage-accent)] text-black shadow-sm font-bold"
                   : "text-stone-400 hover:text-white"
               )}
             >
@@ -240,7 +268,7 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
           </div>
         ) : (
           <div className="text-[12px] font-sans text-stone-400 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#a9c8c0]" />
+            <span className="w-2 h-2 rounded-full bg-[var(--kurage-accent)]" />
             <span>{items.length} skins personalizadas no Kurage</span>
           </div>
         )}
@@ -253,7 +281,7 @@ export function PlayerInventoryShowcase({ steamId64, isOwner = false }: PlayerIn
           {(knives.length > 0 || gloves.length > 0 || agents.length > 0) && (
             <div className="flex flex-col gap-3">
               <h4 className="font-display text-[15px] font-bold text-white tracking-tight flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#a9c8c0]" />
+                <span className="w-2 h-2 rounded-full bg-[var(--kurage-accent)]" />
                 Armamento Especial & Cosméticos
               </h4>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
@@ -412,7 +440,7 @@ function ShowcaseCard({
   return (
     <div
       onClick={onInspect}
-      className="group relative flex flex-col p-3.5 rounded-[16px] bg-[#060a0d]/90 hover:bg-white/[0.05] border border-white/[0.08] hover:border-[#a9c8c0]/40 transition-all cursor-pointer shadow-lg overflow-hidden"
+      className="group relative flex flex-col p-3.5 rounded-[16px] bg-[#060a0d]/90 hover:bg-white/[0.05] border border-white/[0.08] hover:border-[var(--kurage-accent)]/40 transition-all cursor-pointer shadow-lg overflow-hidden"
     >
       {/* Top Header info */}
       <div className="flex items-center justify-between text-[11px] font-sans text-stone-400 mb-1 z-10">
@@ -455,14 +483,14 @@ function ShowcaseCard({
             className="p-2 rounded-full bg-white/15 hover:bg-white/30 text-white transition-colors"
             title="Copiar Comando !i"
           >
-            {isCopied ? <PiCheck className="w-4 h-4 text-[#a9c8c0]" /> : <PiCopy className="w-4 h-4" />}
+            {isCopied ? <PiCheck className="w-4 h-4 text-[var(--kurage-accent)]" /> : <PiCopy className="w-4 h-4" />}
           </button>
 
           {!isOwner && (
             <button
               type="button"
               onClick={onCloneSkin}
-              className="p-2 rounded-full bg-white/15 hover:bg-white/30 text-[#a9c8c0] transition-colors"
+              className="p-2 rounded-full bg-white/15 hover:bg-white/30 text-[var(--kurage-accent)] transition-colors"
               title="Adicionar ao meu inventário"
             >
               <PiPlus className="w-4 h-4" />

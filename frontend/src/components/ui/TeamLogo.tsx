@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import Link from "next/link";
 import { PiShield } from "react-icons/pi";
 import { cn } from "@/lib/utils";
@@ -75,20 +75,10 @@ export function TeamLogo({
   const resolvedName = teamName || known?.name || teamTag || "";
   const resolvedUrl = logoUrl || known?.logoUrl || null;
 
-  const [imageError, setImageError] = useState(false);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // Reset image error state whenever URL changes & check if already failed before hydration
-  useEffect(() => {
-    setImageError(false);
-    if (imgRef.current) {
-      if (imgRef.current.complete && imgRef.current.naturalWidth === 0) {
-        setImageError(true);
-      }
-    }
-  }, [resolvedUrl]);
-
-  const hasValidImage = Boolean(resolvedUrl && !imageError);
+  const hasValidImage = Boolean(resolvedUrl && failedSource !== resolvedUrl);
 
   const content = (
     <>
@@ -104,10 +94,10 @@ export function TeamLogo({
           decoding="async"
           style={{ width: size, height: size }}
           className="object-contain shrink-0 transition-transform duration-200 group-hover/team:scale-110"
-          onError={() => setImageError(true)}
+          onError={() => setFailedSource(resolvedUrl)}
           onLoad={(e) => {
             if ((e.currentTarget as HTMLImageElement).naturalWidth === 0) {
-              setImageError(true);
+              setFailedSource(resolvedUrl);
             }
           }}
         />

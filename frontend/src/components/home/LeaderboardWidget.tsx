@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { PiArrowRight, PiTrophy, PiWaves, PiCrosshair } from "react-icons/pi";
+import { PiSpinnerGap, PiTrophy, PiWarningCircle } from "react-icons/pi";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { Avatar } from "@/components/ui/Avatar";
@@ -18,10 +19,12 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 
 interface LeaderboardPlayer {
   kurageId: string | number;
+  steamId64?: string;
   username: string;
   avatarUrl: string | null;
   country?: string;
   kurageLevel?: number;
+  level?: number;
   faceitLevel?: number | null;
   kurageElo?: number;
   faceitElo?: number;
@@ -35,51 +38,40 @@ interface LeaderboardPlayer {
   teamLogoUrl?: string | null;
 }
 
-interface LeaderboardWidgetProps {
-  isAuthenticated?: boolean;
+interface LeaderboardResponse {
+  content?: LeaderboardPlayer[];
 }
 
-export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidgetProps) {
-  const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchTopPlayers() {
-      try {
-        const response = await api.get<any>("/leaderboard/players?page=0&size=3");
-        if (response && response.content && Array.isArray(response.content) && response.content.length > 0) {
-          const mapped = response.content.map((p: any, idx: number) => {
-            const teamInfo = p.teamTag && KNOWN_TEAM_LOGOS[p.teamTag.toUpperCase()];
-            return {
-              kurageId: p.kurageId || p.steamId64 || `player-${idx + 1}`,
-              username: p.username || `Player #${idx + 1}`,
-              avatarUrl: p.avatarUrl || null,
-              country: p.country || "br",
-              kurageLevel: p.kurageLevel ?? p.level ?? 0,
-              faceitLevel: p.faceitLevel ?? null,
-              kurageElo: p.kurageElo ?? p.faceitElo ?? 2000,
-              position: p.position || idx + 1,
-              kdRatio: p.kdRatio ?? null,
-              winRate: p.winRate ?? null,
-              matches: p.matches ?? 0,
-              primaryFunction: p.primaryFunction || null,
-              teamTag: p.teamTag || null,
-              teamName: p.teamName || (teamInfo ? teamInfo.name : p.teamTag),
-              teamLogoUrl: p.teamLogoUrl || (teamInfo ? teamInfo.logoUrl : null),
-            };
-          });
-          setPlayers(mapped);
-        } else {
-          setPlayers([]);
-        }
-      } catch {
-        setPlayers([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchTopPlayers();
-  }, []);
+export function LeaderboardWidget() {
+  const {
+    data: players = [],
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["leaderboard", "home", "players"],
+    queryFn: async () => {
+      const response = await api.get<LeaderboardResponse>("/leaderboard/players?page=0&size=3");
+      if (!Array.isArray(response?.content)) throw new Error("Resposta inválida do ranking");
+      return response.content.map((player) => {
+        const teamInfo = player.teamTag && KNOWN_TEAM_LOGOS[player.teamTag.toUpperCase()];
+        return {
+          ...player,
+          avatarUrl: player.avatarUrl ?? null,
+          kurageLevel: player.kurageLevel ?? player.level ?? 0,
+          faceitLevel: player.faceitLevel ?? null,
+          kdRatio: player.kdRatio ?? null,
+          winRate: player.winRate ?? null,
+          matches: player.matches ?? 0,
+          primaryFunction: player.primaryFunction || null,
+          teamTag: player.teamTag || null,
+          teamName: player.teamName || (teamInfo ? teamInfo.name : player.teamTag),
+          teamLogoUrl: player.teamLogoUrl || (teamInfo ? teamInfo.logoUrl : null),
+        };
+      });
+    },
+    staleTime: 60_000,
+  });
 
   const firstPlace = players.find((p) => p.position === 1) || players[0];
   const secondPlace = players.find((p) => p.position === 2) || (players.length > 1 ? players[1] : undefined);
@@ -94,7 +86,7 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 90% 80% at 50% 40%, rgba(169, 200, 192, 0.18) 0%, rgba(146, 188, 227, 0.08) 50%, transparent 85%)",
+              "radial-gradient(ellipse 90% 80% at 50% 40%, rgba(var(--kurage-accent-rgb),0.18) 0%, rgba(146, 188, 227, 0.08) 50%, transparent 85%)",
           }}
         />
 
@@ -107,7 +99,7 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
           transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
           className="absolute top-[2%] left-1/2 -translate-x-1/2 w-[650px] h-[350px] mix-blend-screen blur-3xl opacity-40"
           style={{
-            background: "radial-gradient(ellipse at center, rgba(229, 193, 88, 0.22) 0%, rgba(169, 200, 192, 0.12) 50%, transparent 75%)",
+            background: "radial-gradient(ellipse at center, rgba(229, 193, 88, 0.22) 0%, rgba(var(--kurage-accent-rgb),0.12) 50%, transparent 75%)",
           }}
         />
 
@@ -134,7 +126,7 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
           transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
           className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full mix-blend-screen blur-3xl opacity-45"
           style={{
-            background: "radial-gradient(circle, rgba(229, 193, 88, 0.28) 0%, rgba(169, 200, 192, 0.12) 50%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(229, 193, 88, 0.28) 0%, rgba(var(--kurage-accent-rgb),0.12) 50%, transparent 70%)",
           }}
         />
 
@@ -147,7 +139,7 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
           transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
           className="absolute top-[32%] right-[10%] w-[380px] h-[380px] rounded-full mix-blend-screen blur-3xl opacity-35"
           style={{
-            background: "radial-gradient(circle, rgba(205, 127, 50, 0.25) 0%, rgba(169, 200, 192, 0.08) 50%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(205, 127, 50, 0.25) 0%, rgba(var(--kurage-accent-rgb),0.08) 50%, transparent 70%)",
           }}
         />
 
@@ -159,7 +151,7 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
           transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
           className="absolute bottom-[2%] left-1/2 -translate-x-1/2 w-[700px] h-[220px] mix-blend-screen blur-3xl opacity-30"
           style={{
-            background: "radial-gradient(ellipse at 50% 100%, rgba(169, 200, 192, 0.25) 0%, transparent 70%)",
+            background: "radial-gradient(ellipse at 50% 100%, rgba(var(--kurage-accent-rgb),0.25) 0%, transparent 70%)",
           }}
         />
       </div>
@@ -171,7 +163,7 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
             Os Melhores do Servidor.
           </h2>
           <p className="mt-4 text-[16px] leading-relaxed text-body">
-            Classificação em tempo real dos jogadores com maior dominância tática, rating individual e impacto em combate.
+            Classificação dos jogadores com partidas oficiais registradas, ordenada pelo ELO Kurage.
           </p>
         </div>
 
@@ -184,10 +176,10 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
           className="mx-auto max-w-5xl"
         >
           {/* Calibrating Season Notice if 0 players */}
-          {players.length === 0 && (
+          {!isPending && !isError && players.length === 0 && (
             <div className="mb-10 mx-auto max-w-lg text-center p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-md">
-              <span className="text-[10px] font-sans font-semibold uppercase tracking-widest text-[#a9c8c0] flex items-center justify-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#a9c8c0] animate-pulse" />
+              <span className="text-[10px] font-sans font-semibold uppercase tracking-widest text-[var(--kurage-accent)] flex items-center justify-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--kurage-accent)] animate-pulse" />
                 Temporada em Calibração
               </span>
               <p className="text-[13px] text-mute font-sans mt-1">
@@ -196,6 +188,25 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
             </div>
           )}
 
+          {isPending ? (
+            <div className="flex min-h-[260px] items-center justify-center gap-3 text-[13px] text-mute">
+              <PiSpinnerGap className="h-5 w-5 animate-spin text-[var(--kurage-accent)]" aria-hidden />
+              Confirmando o pódio oficial...
+            </div>
+          ) : isError ? (
+            <div className="mx-auto flex min-h-[260px] max-w-xl flex-col items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.02] px-6 text-center">
+              <PiWarningCircle className="h-7 w-7 text-[#d7a57f]" aria-hidden />
+              <h3 className="mt-4 font-display text-[19px] font-semibold text-white">Pódio temporariamente indisponível</h3>
+              <p className="mt-2 text-[13px] leading-relaxed text-mute">O servidor não confirmou a classificação. Tente novamente em instantes.</p>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="mt-5 rounded-[8px] border border-white/[0.1] bg-white/[0.06] px-4 py-2 text-[12px] font-medium text-white transition-colors hover:bg-white/[0.1]"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 gap-6 sm:gap-4 lg:grid-cols-3 lg:items-end">
             
             {/* ── 2ND PLACE (Prata / Silver - Left Column) ── */}
@@ -271,6 +282,7 @@ export function LeaderboardWidget({ isAuthenticated = false }: LeaderboardWidget
             )}
 
           </div>
+          )}
 
           {/* CTA Actions */}
           <div className="mt-16 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -298,7 +310,7 @@ interface FloatingPlayerDetailsProps {
 }
 
 function FloatingPlayerDetails({ player, rank, tier, delay }: FloatingPlayerDetailsProps) {
-  const eloValue = player.kurageElo ?? player.faceitElo ?? 2000;
+  const eloValue = player.kurageElo;
 
   const tierStyles = {
     gold: {
@@ -364,6 +376,7 @@ function FloatingPlayerDetails({ player, rank, tier, delay }: FloatingPlayerDeta
         <Avatar
           src={player.avatarUrl}
           username={player.username}
+          kurageId={player.kurageId}
           size={rank === 1 ? "xl" : "lg"}
           className={tierStyles.avatarRing}
         />
@@ -387,7 +400,7 @@ function FloatingPlayerDetails({ player, rank, tier, delay }: FloatingPlayerDeta
           rank === 1 ? "text-[46px] sm:text-[54px]" : "text-[36px] sm:text-[42px]",
           tierStyles.eloColor
         )}>
-          {eloValue}
+          {eloValue ?? "—"}
         </span>
         <span className="text-[10px] font-sans font-semibold tracking-widest text-mute uppercase mt-1">
           Rating ELO
