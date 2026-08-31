@@ -76,26 +76,21 @@ Sem proteção de branch, um push direto pode contornar essa barreira.
 
 ## Ativação inicial deste fluxo
 
-Estes arquivos foram preparados na branch local `codex/ci-dev`; alterações locais
-não configuram automaticamente o GitHub. Não houve push, PR ou deploy pelo agente.
+`dev` nasce dos ajustes preparados em `codex/ci-dev`, incorporando os workflows,
+o bloqueio de previews e a organização do Dependabot. Não é necessário mesclar a
+branch temporária separadamente: o primeiro PR de **`dev` para `main`** leva o
+conjunto. Revise o diff e aguarde os três checks antes de usar **Create a merge
+commit**. Esse merge pode publicar o sistema e ativa a política do Dependabot,
+que precisa estar na branch padrão. Publicar `dev` sozinho não altera a `main`.
 
-1. Revise os arquivos e faça commit/push dessa branch, sem incluir `.env` reais.
-2. Abra excepcionalmente um PR com **base `main`**, **compare `codex/ci-dev`**.
-3. Aguarde os três checks, revise o diff e faça merge. Isso pode publicar o sistema.
-4. Depois desse merge, crie `dev` a partir da `main` atualizada. Assim ela já nasce
-   com os novos workflows e com os previews Vercel desativados.
-
-No terminal local, com a árvore de trabalho limpa, execute uma linha por vez:
+Depois da criação inicial, com a árvore de trabalho limpa:
 
 ```powershell
-git switch main
-git pull --ff-only origin main
-git switch -c dev
-git push -u origin dev
+git switch dev
+git pull --ff-only origin dev
 ```
 
-O comando de criação é usado somente uma vez. Se `dev` já existir, troque para
-ela e atualize-a; não recrie nem force o histórico. Branches antigas precisam
+Não recrie `dev` nem force o histórico. Branches antigas precisam
 receber esta configuração antes de ter o novo comportamento.
 
 ## Rotina de uma melhoria
@@ -171,8 +166,40 @@ Se o plano não permitir, CI ainda roda, mas não há bloqueio técnico de merge
 siga o processo manualmente e não torne o repositório público para contornar isso.
 As proteções e a configuração do painel Vercel não foram alteradas pelo agente.
 
+## Dependabot: fila pequena e revisão consciente
+
+A configuração em `.github/dependabot.yml` verifica npm, Maven e GitHub Actions
+semanalmente, às segundas-feiras, às 10h no fuso `America/Fortaleza` (horário
+agendado, não garantia de execução pontual). Atualizações minor/patch ficam
+agrupadas por ecossistema; majors continuam individuais. O limite é de dois PRs
+de versão abertos por ecossistema, não dois por semana. PRs de segurança são
+agrupados separadamente e não entram nesse limite. Não há merge automático.
+
+O bloqueio de major do ESLint continua até confirmar compatibilidade dos plugins.
+Grupos minor/patch também exigem revisão e CI: o número da versão não garante
+ausência de regressões.
+
+As atualizações comuns usam `target-branch: dev`. Cada ecossistema tem outro
+bloco sem `target-branch`, com limite de versões igual a zero e grupo de segurança,
+para continuar recebendo correções de segurança na branch padrão (`main`) sem
+duplicar PRs comuns nela. O limite zero não desativa alertas nem PRs de segurança.
+A configuração é lida da branch padrão: enquanto estiver apenas em `dev`, a
+política anterior da `main` continua valendo. Após mesclar uma correção de
+segurança na `main`, sincronize-a de volta para `dev`.
+
+O "reset" de PRs é fechamento sem merge, seguido da remoção das branches do bot.
+Não apaga o histórico nem modifica versões instaladas. Não dispense alertas de
+segurança para limpar a lista. Fechar um PR individual pode fazer o Dependabot
+deixar de oferecer aquela versão; não é garantia de recriação automática. Após
+publicar a nova política, confira **Insights → Dependency graph → Dependabot**
+e solicite uma verificação de atualizações em cada ecossistema. Se uma atualização
+necessária não voltar, consulte o PR fechado: restaure a branch/reabra o PR ou use
+os comandos suportados do Dependabot, sem ignorar uma vulnerabilidade pendente.
+
 ## Referências
 
 - [Gatilhos e checks pendentes por filtros](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
 - [Proteção de branches e disponibilidade por plano](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
 - [Controle de deploy por branch na Vercel](https://vercel.com/docs/project-configuration/git-configuration)
+- [Opções de configuração do Dependabot](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)
+- [Comandos de PRs do Dependabot](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands)

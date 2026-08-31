@@ -75,26 +75,21 @@ after a push. Without branch protection, direct pushes can bypass this barrier.
 
 ## Initial activation
 
-Changes were prepared on local branch `codex/ci-dev`. Local files do not configure
-GitHub automatically. The agent did not push, create a PR, or deploy.
+`dev` starts from the changes prepared on `codex/ci-dev`, including workflows,
+disabled previews, and Dependabot organization. The temporary branch does not
+need a separate merge: the first **dev → main** PR carries the whole change.
+Review the diff and wait for all three checks before using **Create a merge
+commit**. That merge can deploy the site and activates the Dependabot policy,
+which must live on the default branch. Publishing `dev` alone does not change `main`.
 
-1. Review, commit, and push that branch, excluding real `.env` files.
-2. Open an exceptional bootstrap PR: **base main**, **compare codex/ci-dev**.
-3. Wait for all three checks, review the diff, and merge. This can deploy the site.
-4. Create `dev` from the updated `main`, so it inherits the workflows and disabled
-   Vercel previews immediately.
-
-With a clean working tree, run these local commands one line at a time:
+After initial creation, with a clean working tree:
 
 ```powershell
-git switch main
-git pull --ff-only origin main
-git switch -c dev
-git push -u origin dev
+git switch dev
+git pull --ff-only origin dev
 ```
 
-Create `dev` only once. If it already exists, switch to it and update it instead;
-never recreate or force its history. Existing branches must receive this
+Do not recreate `dev` or force its history. Existing branches must receive this
 configuration before their behavior changes.
 
 ## Everyday change workflow
@@ -169,8 +164,39 @@ CI still runs, but merges/direct pushes are not technically blocked. Follow the
 process manually; do not make the repository public to work around this limit.
 The agent did not change dashboard protections or Vercel project settings.
 
+## Dependabot: a small, reviewed queue
+
+`.github/dependabot.yml` checks npm, Maven, and GitHub Actions weekly on Mondays
+at 10:00 in `America/Fortaleza` (a scheduled time, not an exact execution guarantee).
+Minor/patch updates are grouped by ecosystem; majors remain individual. Each
+ecosystem permits two open version-update PRs, not two per week. Security PRs
+are grouped separately and do not count toward this limit. No auto-merge is enabled.
+
+The ESLint major-version exclusion remains until plugin compatibility is verified.
+Minor/patch groups also require review and CI: version numbers do not guarantee
+regression-free updates.
+
+Routine updates use `target-branch: dev`. Each ecosystem has a second entry
+without `target-branch`, with a zero version-PR limit and a security group,
+retaining security fixes on the default branch (`main`) without duplicate routine
+PRs there. A zero version limit does not disable security alerts or security PRs.
+Dependabot reads configuration from the default branch: while these changes
+exist only on `dev`, the old `main` policy still applies. After merging a security
+fix into `main`, synchronize it back to `dev`.
+
+A PR "reset" closes PRs without merging, then removes the corresponding bot
+branches. It neither erases PR history nor changes installed versions. Do not
+dismiss security alerts just to clear the list. Closing an individual PR may
+stop Dependabot offering that version; automatic recreation is not guaranteed.
+After publishing the new policy, visit **Insights → Dependency graph → Dependabot**
+and request an update check for each ecosystem. If a needed update does not
+return, inspect the closed PR: restore its branch/reopen it or use supported
+Dependabot commands, without ignoring outstanding vulnerabilities.
+
 ## References
 
 - [Workflow triggers and pending checks caused by filters](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
 - [Branch protection and plan availability](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
 - [Vercel Git deployment controls](https://vercel.com/docs/project-configuration/git-configuration)
+- [Dependabot configuration options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)
+- [Dependabot PR commands](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands)
