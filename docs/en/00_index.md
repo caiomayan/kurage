@@ -64,6 +64,7 @@ flowchart TD
 15. [Operations, recovery, and release gate](./15_operations_and_release.md)
 16. [Legal and privacy readiness](./16_legal_readiness.md)
 17. [OCI and Vercel alpha deployment](./17_oci_vercel_alpha_deployment.md)
+18. [Branches, pull requests, and CI/CD](./18_branches_prs_ci.md)
 
 ## Repository policies
 

@@ -2,11 +2,17 @@ name: Frontend quality
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: frontend-quality-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
@@ -16,10 +22,11 @@ jobs:
       run:
         working-directory: frontend
     env:
-      NEXT_PUBLIC_APP_URL: https://kurage.caiomayan.com
-      NEXT_PUBLIC_API_URL: https://api.caiomayan.com
-      NEXT_PUBLIC_CS2_CONNECT_HOST: retake.caiomayan.com:27015
-      NEXT_PUBLIC_R2_PUBLIC_URL: https://assets.caiomayan.com
+      # Build-time URLs only: CI must not use the deployed application or its data.
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      NEXT_PUBLIC_CS2_CONNECT_HOST: ""
+      NEXT_PUBLIC_R2_PUBLIC_URL: ""
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4

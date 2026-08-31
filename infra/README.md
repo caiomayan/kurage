@@ -190,6 +190,16 @@ deployments should use one stable preview hostname that is explicitly added to
 
 ## Release and rollback behavior
 
+The branch/PR workflow is documented in
+[English](../docs/en/18_branches_prs_ci.md) and
+[Portuguese](../docs/pt/18_branches_prs_ci.md). CI runs on every branch push and
+PRs targeting `dev`/`main`; no path filters skip required checks. `dev` is local
+integration without a remote staging stack. Vercel automatic Git deployments
+are limited to `main` by `frontend/vercel.json`. Keep its dashboard Production
+Branch set to `main`; it does not wait for GitHub Actions after a push, so require
+successful PR checks before merging. Previous preview instructions apply only
+if a separate staging backend is introduced and previews are deliberately enabled.
+
 A push to `main` runs the backend tests first. Only a passing revision is built
 for `linux/arm64` and `linux/amd64`, published to GHCR and addressed by digest.
 Manual runs on `main` follow the same test and publication gates. Deployment is

@@ -65,6 +65,7 @@ flowchart TD
 15. [Operação, recuperação e gate de release](./15_operacao_e_release.md)
 16. [Prontidão jurídica e de privacidade](./16_prontidao_juridica.md)
 17. [Deploy da alfa na OCI e Vercel](./17_deploy_alpha_oci_vercel.md)
+18. [Branches, pull requests e CI/CD](./18_branches_prs_ci.md)
 
 ## Documentos do repositório
 

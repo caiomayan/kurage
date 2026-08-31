@@ -1,5 +1,9 @@
 # Contributing to Kurage / Contribuindo com o Kurage
 
+Branch and PR workflow: [English guide](docs/en/18_branches_prs_ci.md) /
+[Guia em português](docs/pt/18_branches_prs_ci.md).
+Use temporary branches → `dev` → `main`; only `main` is automatically deployed.
+
 Kurage is a proprietary product under active development. The canonical
 repository is private and does not accept unsolicited external pull requests.
 This policy protects software-registration evidence, confidential product work,
@@ -27,4 +31,3 @@ autorizados devem possuir acordo escrito de confidencialidade e propriedade
 intelectual, trabalhar em branch vinculada a uma demanda aprovada, nunca enviar
 segredos/dados reais/ativos sem licença, manter a documentação PT/EN sincronizada
 e passar por testes e revisão. Os plugins de `server/plugins` permanecem sob MIT.
-

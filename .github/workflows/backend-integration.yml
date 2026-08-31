@@ -3,22 +3,21 @@ name: Backend CI/CD
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-    paths:
-      - "backend/**"
-      - "infra/deploy/**"
-      - ".github/workflows/backend-integration.yml"
+    # Include dev and temporary branches, including names containing '/'. No tags.
+    branches: ["**"]
   pull_request:
-    paths:
-      - "backend/**"
-      - "infra/deploy/**"
-      - ".github/workflows/backend-integration.yml"
+    branches: [main, dev]
 
 permissions:
   contents: read
 
 jobs:
   test:
+    # Cancel obsolete tests only, never an in-progress publication/deployment.
+    # A PR tests its merge ref; keep it distinct from the branch push check.
+    concurrency:
+      group: backend-test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
