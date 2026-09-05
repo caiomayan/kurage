@@ -469,10 +469,11 @@ das etapas correspondentes, não funcionalidades implicitamente aprovadas.
 
 ## 12. Registro de continuidade e retomada
 
-**Próxima ação:** continuar a etapa 1 migrando, por domínio, os 20 arquivos de
-teste que ainda usam Mockito para integração/contratos reais. Reexecutar os testes
-de ranking e visitantes com PostgreSQL/Redis assim que o Docker Engine estiver
-disponível; não substituir essa validação por H2 ou mocks.
+**Próxima ação:** continuar a etapa 1 migrando, por domínio, os arquivos de teste
+que ainda usam Mockito para integração/contratos reais. A reexecução de ranking e
+visitantes com PostgreSQL/Redis reais já foi feita em 04/09/2026 e passou; a
+migração dos demais domínios continua pendente e não deve ser substituída por H2
+ou mocks.
 
 Para retomar após interrupção, resumo de conversa ou em outra tarefa:
 
@@ -490,6 +491,8 @@ Para retomar após interrupção, resumo de conversa ou em outra tarefa:
 | 31/08/2026 | Plano consolidado com triagem inicial de 5 partidas e perfil dedicado | Somente documentação; aguardando revisão; etapas 1–7 não iniciadas |
 | 31/08/2026 | Revisão 2: Rating multimodo/5v5, HLTV secundário, visitantes e liberdade pós-header | Auditoria documental de pré-início concluída; implementação não iniciada |
 | 31/08/2026 | Revisão 3 e início da etapa 1 | Rating/hovercard/busca/ranking deixaram de expor números substitutos; calibração mínima de 5 entrou nos contratos; visitantes ganharam gravação explícita, consulta por perfil e UI autorizada; `RankingServiceTest` mockado foi substituído por integração real. Suíte unitária: 161 testes verdes; integração aguarda Docker Engine |
+| 04/09/2026 | Etapa 1 validada em integração real e commitada | Commits `ddbdd2d` e `d88b9be` na `dev`. `verify -Pintegration` com Docker ativo revelou que `ProfileVisitPostgresRedisIT` recebia 500 onde esperava 403: `GlobalExceptionHandler` não tratava `AccessDeniedException` e toda negação de autorização virava erro de servidor, quebrando a distinção 401/403 do documento 13. Handler adicionado. Resultado: 161 unitários + 30 integrações verdes, frontend com lint limpo, 29/29 testes e build de produção. Pendências inalteradas: migração dos demais testes mockados, e etapas 2–7 não iniciadas |
+| 04/09/2026 | Grafo de conhecimento do repositório | `graphify-out/` (ignorado pelo Git) com 2.505 nós e 148 comunidades sobre backend, frontend, plugins, migrations, Terraform e `docs/pt`. As invariantes documentadas viraram nós de conceito ligados ao código que governam. `CLAUDE.md` na raiz consolida essas regras para sessões de agente. Ferramenta de apoio: não substitui a auditoria 08 nem este plano como referência de prontidão |
 
 Correções que não podem ser perdidas ao retomar:
 
