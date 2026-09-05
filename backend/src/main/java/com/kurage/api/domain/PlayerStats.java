@@ -67,6 +67,19 @@ public class PlayerStats extends Auditable implements Persistable<UUID> {
     @Column(name = "last_match_at")
     private Instant lastMatchAt;
 
+    /**
+     * Tempo que a plataforma observou o jogador em servidores Kurage, em
+     * segundos. É o terceiro critério de desempate do ranking, do menor para o
+     * maior: entre dois jogadores com o mesmo ELO e o mesmo K/D, quem alcançou
+     * aquilo em menos tempo fica na frente.
+     *
+     * <p>Só acumula a partir do deploy desta versão. Não é o histórico total do
+     * jogador no CS2, é o tempo medido aqui.
+     */
+    @Builder.Default
+    @Column(name = "playtime_seconds", nullable = false)
+    private Long playtimeSeconds = 0L;
+
     public int getKurageLevel() {
         if (kurageElo == null || kurageElo < 0) return 1;
         if (kurageElo >= 900) return 10;
@@ -75,6 +88,18 @@ public class PlayerStats extends Auditable implements Persistable<UUID> {
 
     public boolean isCalibrated() {
         return matchesPlayed != null && matchesPlayed >= CALIBRATION_MATCHES_REQUIRED;
+    }
+
+    /**
+     * K/D como o ranking o entende: exige mortes reais no denominador.
+     *
+     * <p>Devolve {@code null} quando não há amostra. Tratar "sem mortes" como um
+     * K/D igual à contagem bruta de abates publicaria um número que não é uma
+     * razão.
+     */
+    public Double getKillDeathRatio() {
+        if (kills == null || deaths == null || deaths <= 0) return null;
+        return kills.doubleValue() / deaths.doubleValue();
     }
 
     @Override

@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,9 +22,11 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -34,13 +37,27 @@ public class RankingService {
     public static final int MAX_PLAYER_RANKING = 200;
     public static final int MAX_TEAM_RANKING = 50;
 
+    /**
+     * Vagas de Level S. O documento 19 §6 fixa o top 30 do ranking geral; com
+     * menos de 30 calibrados, todos eles recebem.
+     */
+    public static final int LEVEL_S_SLOTS = 30;
+
     private final PlayerStatsRepository playerStatsRepository;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final RankingSnapshotRepository rankingSnapshotRepository;
     private final TeamRankingSnapshotRepository teamRankingSnapshotRepository;
+    private final LevelSGrantRepository levelSGrantRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * Fuso da virada do dia para o Level S. São Paulo por padrão; mesmo offset de
+     * Fortaleza, que é o fuso já usado na automação do repositório.
+     */
+    @Value("${ranking.timezone:America/Sao_Paulo}")
+    private String levelSTimezone;
 
     @Transactional(readOnly = true)
     public PageResponse<LeaderboardResponse> getPlayerRanking(int page, int size) {
@@ -292,7 +309,7 @@ public class RankingService {
 
         // Jogadores Adjacentes (~5 jogadores centrados na posição)
         int fetchCount = Math.min(MAX_PLAYER_RANKING, Math.max(5, currentPosition + 2));
-        List<PlayerStats> topList = playerStatsRepository.findTopOrderByKurageEloDesc(PageRequest.of(0, fetchCount));
+        List<PlayerStats> topList = playerStatsRepository.findTopOrderByKurageEloDesc(fetchCount);
 
         List<LeaderboardResponse> adjacentPlayers = new ArrayList<>();
         LeaderboardResponse nextPlayerToPass = null;
@@ -351,13 +368,77 @@ public class RankingService {
         return contextResponse;
     }
 
+    /**
+     * Concede o Level S do dia que começa.
+     *
+     * <p>Roda à meia-noite por decisão de produto: o S não acompanha o ELO em
+     * tempo real. Quem estiver no topo elegível neste instante carrega o S
+     * durante todo o dia seguinte, mesmo que o ELO mude no meio do dia.
+     *
+     * <p>Idempotente: apagar e regravar a data permite reexecutar após um
+     * reinício sem duplicar concessões nem estourar as 30 vagas. A ordem vem do
+     * desempate determinístico do repositório, que é o que garante que a vaga 30
+     * nunca fique ambígua.
+     */
+    @Scheduled(cron = "${ranking.level-s.cron:0 0 0 * * *}", zone = "${ranking.timezone:America/Sao_Paulo}")
+    @Transactional
+    public void grantDailyLevelS() {
+        grantLevelSFor(LocalDate.now(ZoneId.of(levelSTimezone)));
+    }
+
+    /**
+     * Executa a concessão para uma data específica. Separado do gatilho agendado
+     * para que a integração exercite a regra sem depender do relógio.
+     */
+    @Transactional
+    public int grantLevelSFor(LocalDate date) {
+        log.info("Granting Level S for date: {}", date);
+
+        List<PlayerStats> eligible = playerStatsRepository.findTopOrderByKurageEloDesc(LEVEL_S_SLOTS);
+        levelSGrantRepository.deleteByDate(date);
+
+        int granted = 0;
+        for (PlayerStats stats : eligible) {
+            UUID userId = stats.getUserId();
+            if (userId == null) {
+                log.warn("Skipping Level S grant with missing user id");
+                continue;
+            }
+            granted++;
+            // A concessão é construída a partir do identificador, e não da
+            // associação carregada: PlayerStats pode chegar do contexto de
+            // persistência com o vínculo ainda não materializado, e o S não pode
+            // depender disso. A referência evita um SELECT extra por jogador.
+            levelSGrantRepository.save(LevelSGrant.builder()
+                    .id(new LevelSGrant.LevelSGrantId(date, userId))
+                    .user(userRepository.getReferenceById(userId))
+                    .position(granted)
+                    .grantedAt(Instant.now())
+                    .build());
+        }
+
+        log.info("Level S granted to {} player(s) for {}", granted, date);
+        return granted;
+    }
+
+    /**
+     * Se o jogador carrega o Level S hoje.
+     *
+     * <p>Lê a concessão do dia, não a posição atual: o S vale o dia inteiro.
+     */
+    @Transactional(readOnly = true)
+    public boolean isLevelS(UUID userId) {
+        return levelSGrantRepository.existsByIdSnapshotDateAndIdUserId(
+                LocalDate.now(ZoneId.of(levelSTimezone)), userId);
+    }
+
     @Scheduled(cron = "${ranking.snapshot.cron:0 0 4 * * *}")
     @Transactional
     public void generateDailyPlayerSnapshots() {
         LocalDate date = LocalDate.now();
         log.info("Starting daily player ranking snapshots generation for date: {}", date);
 
-        List<PlayerStats> topPlayers = playerStatsRepository.findTopOrderByKurageEloDesc(PageRequest.of(0, MAX_PLAYER_RANKING));
+        List<PlayerStats> topPlayers = playerStatsRepository.findTopOrderByKurageEloDesc(MAX_PLAYER_RANKING);
 
         int savedCount = 0;
         for (int i = 0; i < topPlayers.size(); i++) {

@@ -33,6 +33,7 @@ _SAFE_RATIO = "frontend_src_lib_metrics_saferatio"
 _DEPTH_FIELD = "frontend_src_components_profile_profiledepthfield_profiledepthfield"
 _SEARCH_HISTORY = "frontend_src_lib_search_history_historykey"
 _SHORTCUTS = "frontend_src_lib_search_shortcuts_shortcutsfor"
+_PLAYTIME = "backend_src_main_java_com_kurage_api_service_playtimeservice_playtimeservice"
 
 D05 = "docs/pt/05_game_servers_subsystem.md"
 D07 = "docs/pt/07_frontend_design_system.md"
@@ -181,6 +182,17 @@ CONCEPTS: list[tuple[str, str, str, str]] = [
      "apagavel e o painel nao publica termos digitados por outras pessoas. Um bloco de mais "
      "procurados so e permitido com coleta real, janela temporal, amostra minima e protecao contra "
      "manipulacao; enquanto o trafego for pequeno, fabricar popularidade e proibido."),
+    (D19, "level_s_diario_e_desempate", "Level S Is Granted Daily, Never Live",
+     "O Level S e recalculado uma vez por dia, a meia-noite, e vale o dia inteiro que comeca: quem "
+     "estiver no topo elegivel naquele instante mantem o S mesmo que o ELO mude no meio do dia. Sao "
+     "30 vagas entre calibrados; com menos de 30 elegiveis, todos recebem. O desempate e ELO, depois "
+     "K/D, depois menos horas jogadas, e por fim o identificador, para que a ordem seja "
+     "deterministica e a vaga 30 nunca fique ambigua."),
+    (D19, "horas_jogadas_medidas", "Playtime Is Measured, Not Assumed",
+     "Horas jogadas sao o tempo que a plataforma observou por heartbeat, nao o historico do jogador "
+     "no CS2. Cada avistamento credita apenas o intervalo desde o anterior, limitado a janela de 90 "
+     "segundos: silencio do servidor nao vira hora, espectador nao acumula, e quem nao tem conta "
+     "vinculada nao credita a ninguem. O contador comeca em zero e so conta a partir do deploy."),
     (D15, "backup_so_vale_com_restore", "A Backup Is Only Valid After a Restore",
      "Meta da alfa: RPO de 24 horas e RTO de 4 horas. Um backup so e considerado valido apos um "
      "restore comprovado em banco isolado. Redis nao e backup. Nunca testar pg_restore --clean no "
@@ -240,6 +252,11 @@ LINKS: list[tuple[str, str, str, str, float]] = [
     ("fluxo_de_branches", "documentacao_no_mesmo_pr", "conceptually_related_to", "INFERRED", 0.75),
     ("fluxo_de_branches", "testes_com_servicos_reais", "conceptually_related_to", "INFERRED", 0.85),
     ("backup_so_vale_com_restore", "gate_de_producao", "conceptually_related_to", "EXTRACTED", 1.0),
+    ("level_s_diario_e_desempate", _svc("rankingservice"), "rationale_for", "INFERRED", 0.95),
+    ("level_s_diario_e_desempate", "calibracao_cinco_partidas", "conceptually_related_to", "EXTRACTED", 1.0),
+    ("horas_jogadas_medidas", _PLAYTIME, "rationale_for", "INFERRED", 0.95),
+    ("horas_jogadas_medidas", "regra_dados_honestos", "conceptually_related_to", "INFERRED", 0.85),
+    ("horas_jogadas_medidas", "redis_apenas_efemero", "conceptually_related_to", "INFERRED", 0.85),
     ("historico_de_busca_privado", _SEARCH_HISTORY, "rationale_for", "INFERRED", 0.95),
     ("historico_de_busca_privado", "regra_dados_honestos", "conceptually_related_to", "INFERRED", 0.75),
     ("documentacao_no_mesmo_pr", _SHORTCUTS, "rationale_for", "INFERRED", 0.65),

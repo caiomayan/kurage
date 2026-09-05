@@ -67,6 +67,7 @@ flowchart TD
 17. [Deploy da alfa na OCI e Vercel](./17_deploy_alpha_oci_vercel.md)
 18. [Branches, pull requests e CI/CD](./18_branches_prs_ci.md)
 19. [Plano de evolução: identidade, perfil, Rating e ranking](./19_plano_evolucao_identidade_rating_perfil.md) — planejado, aguardando revisão; inclui registro de retomada.
+20. [Contrato de Rating, ELO e eventos de partida](./20_contrato_rating_e_eventos.md) — **proposta**, aguardando análise do proprietário; nada implementado além do que está marcado como decidido.
 
 ## Documentos do repositório
 

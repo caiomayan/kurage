@@ -46,12 +46,20 @@ class GameServerServiceTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    /**
+     * O acúmulo real de tempo jogado é coberto por PlaytimeAccrualIT contra Redis
+     * e PostgreSQL reais. Aqui ele é isolado porque estes casos verificam o
+     * comportamento do GameServerService, não a medida de presença.
+     */
+    @Mock
+    private PlaytimeService playtimeService;
+
     private GameServerService gameServerService;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @BeforeEach
     void setUp() {
-        gameServerService = new GameServerService(gameServerRepository, userRepository, redisTemplate);
+        gameServerService = new GameServerService(gameServerRepository, userRepository, redisTemplate, playtimeService);
     }
 
     @Nested

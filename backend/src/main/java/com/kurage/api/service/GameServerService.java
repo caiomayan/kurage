@@ -39,6 +39,7 @@ public class GameServerService {
     private final GameServerRepository gameServerRepository;
     private final UserRepository userRepository;
     private final StringRedisTemplate redisTemplate;
+    private final PlaytimeService playtimeService;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     private static final Duration CACHE_TTL = Duration.ofSeconds(30);
@@ -218,6 +219,12 @@ public class GameServerService {
                 Optional<User> userOpt = userRepository.findBySteamId64(p.getSteamId64());
                 if (userOpt.isPresent()) {
                     User u = userOpt.get();
+
+                    // Tempo observado só é creditado a quem tem conta: um Steam
+                    // não vinculado continua visível no roster, mas não acumula
+                    // horas para ninguém.
+                    playtimeService.recordPresence(serverId, p.getSteamId64(), u.getId(), p.getTeam());
+
                     PlayerStats stats = u.getPlayerStats();
                     UserFaceit faceit = u.getFaceit();
                     String clanTag = (u.getTeamMemberships() != null && !u.getTeamMemberships().isEmpty() && u.getTeamMemberships().get(0).getTeam() != null)
