@@ -16,6 +16,15 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
+/**
+ * Failure-injection coverage for the limiter.
+ *
+ * <p>Counting and window behaviour live in {@code RateLimitWindowIT} against a
+ * real Redis. What remains here is the one thing a real container cannot express
+ * without taking the shared instance down mid-suite: how each route behaves when
+ * Redis is unreachable. docs/pt/13 requires public reads to fail open and
+ * security-sensitive routes to fail closed.
+ */
 @ExtendWith(MockitoExtension.class)
 class RateLimitingServiceTest {
 
@@ -27,18 +36,6 @@ class RateLimitingServiceTest {
     @BeforeEach
     void setUp() {
         rateLimitingService = new RateLimitingService(redisTemplate);
-    }
-
-    @Test
-    void allowGlobalIpWithinLimit() {
-        scriptReturns(5L);
-        assertTrue(rateLimitingService.allowGlobalIp("127.0.0.1"));
-    }
-
-    @Test
-    void allowGlobalIpExceededLimit() {
-        scriptReturns(61L);
-        assertFalse(rateLimitingService.allowGlobalIp("127.0.0.1"));
     }
 
     @Test
@@ -63,11 +60,6 @@ class RateLimitingServiceTest {
     void imageUploadLimitFailsClosedWhenRedisIsDown() {
         scriptFails(new RedisConnectionFailureException("Connection refused"));
         assertFalse(rateLimitingService.allowImageUpload("user-id"));
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private void scriptReturns(long value) {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), eq("70"))).thenReturn(value);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
