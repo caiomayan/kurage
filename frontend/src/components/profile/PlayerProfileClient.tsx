@@ -1,24 +1,25 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
 import {
   PiChartBar,
   PiSword,
   PiScroll,
 } from "react-icons/pi";
 import { useAuth } from "@/lib/auth";
-import { ProfileOceanicBackground } from "./ProfileOceanicBackground";
+import { ProfileDepthField } from "./ProfileDepthField";
+import { ProfileTabs, type ProfileTab as ProfileTabDefinition } from "./ProfileTabs";
 import { PlayerProfileHeader } from "./PlayerProfileHeader";
 import { PlayerMetricsRibbon } from "./PlayerMetricsRibbon";
 import { EloEvolutionBentoCell } from "./PlayerChartsSection";
 import { PlayerInventoryShowcase } from "./PlayerInventoryShowcase";
 import { PlayerMatchesFeed } from "./PlayerMatchesFeed";
 import { ProfileVisitors } from "./ProfileVisitors";
-import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { hasSubscriptionFeature, type PlayerStats, type UserWithStats } from "@/types/user";
 import { resolveIdentity } from "@/lib/identity";
+import { useGsapScope } from "@/lib/motion";
 import { themeController } from "@/lib/theme";
 
 interface PlayerProfileClientProps {
@@ -27,6 +28,14 @@ interface PlayerProfileClientProps {
 }
 
 type ProfileTab = "overview" | "inventory" | "matches";
+
+// Short labels: a tab is a signpost, not a sentence. "Visão Geral & Telemetria"
+// and "Skins & Loadout CS2" said no more than one word each already does.
+const PROFILE_TABS: readonly ProfileTabDefinition<ProfileTab>[] = [
+  { id: "overview", label: "Visão geral", icon: PiChartBar },
+  { id: "inventory", label: "Inventário", icon: PiSword },
+  { id: "matches", label: "Partidas", icon: PiScroll },
+];
 
 export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientProps) {
   const { user: authUser, isLoading: isAuthLoading } = useAuth();
@@ -85,128 +94,99 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
   const hsPercentage = stats && stats.kills > 0 ? Number(((stats.headshots / stats.kills) * 100).toFixed(1)) : null;
   const winRate = stats && matches > 0 ? Number(((stats.matchesWon / matches) * 100).toFixed(1)) : null;
 
+  // One entrance timeline for the page, and one crossfade per section change.
+  // The panel animates its own container rather than remounting three near
+  // identical motion wrappers, so a tab switch never re-runs the header reveal.
+  const scopeRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useGsapScope(scopeRef, () => {
+    gsap.from("[data-reveal]", {
+      y: 18,
+      autoAlpha: 0,
+      duration: 0.7,
+      ease: "power3.out",
+      stagger: 0.08,
+    });
+  }, []);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const tween = gsap.fromTo(
+      panel,
+      { autoAlpha: 0, y: 10 },
+      { autoAlpha: 1, y: 0, duration: 0.35, ease: "power2.out", overwrite: "auto" }
+    );
+    return () => {
+      tween.kill();
+      gsap.set(panel, { clearProps: "opacity,visibility,transform" });
+    };
+  }, [activeTab]);
+
   return (
-    <div className="relative min-h-screen bg-canvas font-sans text-ink overflow-hidden pt-28 sm:pt-36 pb-32">
-      {/* 1. Bespoke Oceanic Atmospheric Background */}
-      <ProfileOceanicBackground />
+    <div
+      ref={scopeRef}
+      className="relative min-h-screen overflow-hidden bg-canvas pt-28 pb-32 font-sans text-ink sm:pt-36"
+    >
+      <ProfileDepthField />
 
-      {/* 2. Main Page Container with Generous Spacing */}
       <div className="relative z-10 mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
-        {/* Profile Header */}
-        <PlayerProfileHeader
-          user={user}
-          faceitLevel={user.faceitLevel ?? null}
-          currentRank={user.rankPosition ?? null}
-          rankDelta={user.rankDelta ?? null}
-        />
-
-        {/* 3. PROFILE NAVIGATION TABS */}
-        <div className="mt-8 flex items-center justify-center">
-          <div className="inline-flex items-center p-1 rounded-[12px] bg-[#060a0d]/90 backdrop-blur-2xl border border-white/[0.08] shadow-lg">
-            <button
-              type="button"
-              onClick={() => setActiveTab("overview")}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-[9px] text-[13px] font-sans font-semibold transition-all cursor-pointer",
-                activeTab === "overview"
-                  ? "bg-white text-black shadow-md"
-                  : "text-stone-400 hover:text-white"
-              )}
-            >
-              <PiChartBar className="w-4 h-4" />
-              <span>Visão Geral & Telemetria</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("inventory")}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-[9px] text-[13px] font-sans font-semibold transition-all cursor-pointer",
-                activeTab === "inventory"
-                  ? "bg-[var(--kurage-accent)] text-black shadow-md font-bold"
-                  : "text-stone-400 hover:text-white"
-              )}
-            >
-              <PiSword className="w-4 h-4" />
-              <span>Skins & Loadout CS2</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("matches")}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-[9px] text-[13px] font-sans font-semibold transition-all cursor-pointer",
-                activeTab === "matches"
-                  ? "bg-white text-black shadow-md"
-                  : "text-stone-400 hover:text-white"
-              )}
-            >
-              <PiScroll className="w-4 h-4" />
-              <span>Histórico de Partidas</span>
-            </button>
-          </div>
+        <div data-reveal>
+          <PlayerProfileHeader
+            user={user}
+            faceitLevel={user.faceitLevel ?? null}
+            currentRank={user.rankPosition ?? null}
+            rankDelta={user.rankDelta ?? null}
+          />
         </div>
 
-        {/* 4. ACTIVE TAB CONTENT */}
-        <div className="mt-6">
-          <AnimatePresence mode="wait">
-            {activeTab === "overview" && (
-              <motion.div
-                key="overview"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                className="flex flex-col gap-6"
-              >
-                {/* Key Performance Indicators */}
-                <PlayerMetricsRibbon
-                  stats={stats}
-                  hltvRating={hltvRating}
-                  kdRatio={kdRatio}
-                  adr={adr}
-                  hsPercentage={hsPercentage}
-                  kastPercentage={stats?.kastPercentage ?? null}
-                  winRate={winRate}
-                />
+        <div data-reveal className="mt-8 flex items-center justify-center">
+          <ProfileTabs
+            tabs={PROFILE_TABS}
+            active={activeTab}
+            onChange={setActiveTab}
+            label="Seções do perfil"
+          />
+        </div>
 
-                {canViewVisitors && <ProfileVisitors kurageId={user.kurageId} />}
+        <div
+          ref={panelRef}
+          role="tabpanel"
+          id={`profile-panel-${activeTab}`}
+          aria-labelledby={`profile-tab-${activeTab}`}
+          tabIndex={-1}
+          className="mt-6 outline-none"
+        >
+          {activeTab === "overview" && (
+            <div className="flex flex-col gap-6">
+              <PlayerMetricsRibbon
+                stats={stats}
+                hltvRating={hltvRating}
+                kdRatio={kdRatio}
+                adr={adr}
+                hsPercentage={hsPercentage}
+                kastPercentage={stats?.kastPercentage ?? null}
+                winRate={winRate}
+              />
 
-                {/* ELO Evolution / Calibration Tide Curve */}
-                <EloEvolutionBentoCell
-                  currentElo={stats?.kurageElo ?? null}
-                  matchesPlayed={matches}
-                />
-              </motion.div>
-            )}
+              {canViewVisitors && <ProfileVisitors kurageId={user.kurageId} />}
 
-            {activeTab === "inventory" && (
-              <motion.div
-                key="inventory"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <PlayerInventoryShowcase
-                  steamId64={user.steamId64 || ""}
-                  isOwner={isOwner}
-                />
-              </motion.div>
-            )}
+              <EloEvolutionBentoCell
+                currentElo={stats?.kurageElo ?? null}
+                matchesPlayed={matches}
+              />
+            </div>
+          )}
 
-            {activeTab === "matches" && (
-              <motion.div
-                key="matches"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <PlayerMatchesFeed />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {activeTab === "inventory" && (
+            <PlayerInventoryShowcase
+              steamId64={user.steamId64 || ""}
+              isOwner={isOwner}
+            />
+          )}
+
+          {activeTab === "matches" && <PlayerMatchesFeed />}
         </div>
       </div>
     </div>

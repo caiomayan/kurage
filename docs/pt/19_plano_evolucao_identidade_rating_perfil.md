@@ -3,9 +3,9 @@
 [Voltar ao índice](./00_index.md)
 
 **Estado:** aprovado; revisão 3 em execução por entregas pequenas.  
-**Atualização:** 04/09/2026.  
-**Base de código inspecionada:** `235c765`, branch `dev`.  
-**Execução deste ciclo:** etapas 1 e 2 concluídas e validadas com PostgreSQL e Redis reais. Etapa 3 é a próxima e depende de referência visual aprovada. Etapas 5 e 6 seguem bloqueadas pelas decisões da seção 11.
+**Atualização:** 05/09/2026.  
+**Base de código inspecionada:** `fbf1195`, branch `dev`.  
+**Execução deste ciclo:** etapas 1 e 2 concluídas; etapa 3 entregue no recorte de composição, fundo e desempenho. Etapa 4 está livre. Etapas 5 e 6 seguem bloqueadas pelas decisões da seção 11.
 
 Este documento é a referência de continuidade deste ciclo. Consolida as decisões
 da conversa e substitui propostas anteriores conflitantes. Não descreve todas as
@@ -469,11 +469,11 @@ das etapas correspondentes, não funcionalidades implicitamente aprovadas.
 
 ## 12. Registro de continuidade e retomada
 
-**Próxima ação:** etapa 3 — perfil completo. As etapas 1 e 2 estão concluídas e
-validadas (ver registro abaixo). A etapa 3 exige referência visual aprovada pelo
-proprietário antes do código, conforme a seção 7.5, e medição de desempenho no
-equipamento-alvo. As etapas 5 e 6 continuam bloqueadas pelas decisões numéricas
-da seção 11, que a implementação não deve inventar.
+**Próxima ação:** etapa 4 — busca enriquecida — ou o fechamento da etapa 3. O
+recorte de composição, fundo e desempenho do perfil foi entregue; o que resta da
+etapa 3 é a aprovação visual do proprietário e a medição de FPS no equipamento
+alvo, que exigem a máquina dele. As etapas 5 e 6 continuam bloqueadas pelas
+decisões numéricas da seção 11, que a implementação não deve inventar.
 
 Para retomar após interrupção, resumo de conversa ou em outra tarefa:
 
@@ -493,6 +493,8 @@ Para retomar após interrupção, resumo de conversa ou em outra tarefa:
 | 31/08/2026 | Revisão 3 e início da etapa 1 | Rating/hovercard/busca/ranking deixaram de expor números substitutos; calibração mínima de 5 entrou nos contratos; visitantes ganharam gravação explícita, consulta por perfil e UI autorizada; `RankingServiceTest` mockado foi substituído por integração real. Suíte unitária: 161 testes verdes; integração aguarda Docker Engine |
 | 04/09/2026 | Etapa 1 validada em integração real e commitada | Commits `ddbdd2d` e `d88b9be` na `dev`. `verify -Pintegration` com Docker ativo revelou que `ProfileVisitPostgresRedisIT` recebia 500 onde esperava 403: `GlobalExceptionHandler` não tratava `AccessDeniedException` e toda negação de autorização virava erro de servidor, quebrando a distinção 401/403 do documento 13. Handler adicionado. Resultado: 161 unitários + 30 integrações verdes, frontend com lint limpo, 29/29 testes e build de produção. Pendências inalteradas: migração dos demais testes mockados, e etapas 2–7 não iniciadas |
 | 04/09/2026 | Grafo de conhecimento do repositório | `graphify-out/` (ignorado pelo Git) com 2.505 nós e 148 comunidades sobre backend, frontend, plugins, migrations, Terraform e `docs/pt`. As invariantes documentadas viraram nós de conceito ligados ao código que governam. `CLAUDE.md` na raiz consolida essas regras para sessões de agente. Ferramenta de apoio: não substitui a auditoria 08 nem este plano como referência de prontidão |
+| 05/09/2026 | Etapa 3: composição, fundo e desempenho do perfil | O `ProfileOceanicBackground` foi removido. Ele mantinha **13 animações infinitas simultâneas** — três morphs de path SVG, três halos com `blur-3xl` e sete partículas — todas em `mix-blend-screen`, além de um azul `#92bce3` cravado que escapava do tema. Substituído pelo `ProfileDepthField`: um único canvas, um laço de `requestAnimationFrame`, resolução limitada a 1.5x, suspenso fora da viewport e com a aba oculta, estático sob `prefers-reduced-motion`, e acento resolvido do token CSS com releitura quando o tema de identidade muda (seção 2.2). As abas viraram um componente com uma linguagem visual única, `role="tablist"`, navegação por setas e rótulos curtos: "Visão Geral & Telemetria" virou "Visão geral". A `PlayerMetricsRibbon` perdeu seis funções de tier quase idênticas e passou a derivar a barra do valor medido — antes ela devolvia 95/72/48/25 fixos por tier, então dois valores muito diferentes desenhavam a mesma barra. Correções de honestidade: K/D deixou de cair para `0` e de virar contagem bruta de kills quando `deaths = 0`; o card "Rating 2.0 / HLTV Impacto" virou "Rating", porque a seção 4.1 define HLTV como dado futuro e exclusivo de 5v5 que não compõe o Rating da plataforma; o nível deixou de ser `?? 0`. Contraste corrigido: rótulos usavam `--mute` (#444) sobre quase-preto, cerca de 2.2:1. GSAP entrou como dependência a pedido do proprietário. Validação: lint limpo, 41/41 testes, build de produção, e conferência visual em 1440x900 e 375x812 contra a API local com PostgreSQL e Redis reais |
+| 05/09/2026 | Pendências da etapa 3 | Não entregues: aprovação visual do proprietário (seção 7.5) e a medição de antes/depois de FPS no equipamento alvo (seção 7.6), que exigem a máquina dele. O quadro de visitantes já existia da etapa 1 e não foi retrabalhado. O dropdown do avatar, também previsto na etapa 3, continua pendente |
 | 04/09/2026 | Etapa 1 concluída | Commit `7a369b4`. Os três testes cujo mock escondia a propriedade sob teste migraram para Redis real: rotação de refresh (compare-and-set em Lua), state OAuth (`GETDEL`) e rate limit (`INCR`+`EXPIRE`). Um `StringRedisTemplate` mockado não executa Lua, então a cobertura anterior afirmava a chamada sem provar a atomicidade. `RefreshTokenRotationIT` disputa oito refreshes concorrentes e exige convergência no token do vencedor. Os casos de Redis indisponível permanecem mockados por decisão: derrubar o container compartilhado no meio da suíte não é opção, e são eles que provam fail-open/fail-closed. Suíte: 156 unitários + 43 integrações verdes |
 | 04/09/2026 | Etapa 2 concluída | Commit `235c765`. `lib/identity.ts` resolve a precedência Dono > Admin > Maré > padrão como função pura; assinatura expirada lê como FREE. `lib/theme.ts` mantém a identidade do visitante sob uma pilha de escopos de perfil, substituindo os dois escritores que competiam pelo `data-kurage-theme`. O perfil assume a identidade do titular e restaura a do visitante ao sair, inclusive para visitante anônimo e acesso direto por URL. Tokens de Dono e Admin adicionados; cores semânticas de erro/sucesso preservadas. 37/37 testes de frontend, lint limpo, build de produção |
 

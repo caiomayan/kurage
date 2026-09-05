@@ -29,6 +29,8 @@ def _dom(name: str) -> str:
 _HANDLER = f"{_B}exception_globalexceptionhandler_globalexceptionhandler"
 _IDENTITY = "frontend_src_lib_identity_resolveidentity"
 _THEME = "frontend_src_lib_theme_createthemecontroller"
+_SAFE_RATIO = "frontend_src_lib_metrics_saferatio"
+_DEPTH_FIELD = "frontend_src_components_profile_profiledepthfield_profiledepthfield"
 
 D05 = "docs/pt/05_game_servers_subsystem.md"
 D07 = "docs/pt/07_frontend_design_system.md"
@@ -182,6 +184,8 @@ LINKS: list[tuple[str, str, str, str, float]] = [
     ("regra_dados_honestos", _svc("rankingservice"), "rationale_for", "INFERRED", 0.95),
     ("regra_dados_honestos", _svc("userservice"), "rationale_for", "INFERRED", 0.95),
     ("regra_dados_honestos", _svc("searchservice"), "rationale_for", "INFERRED", 0.85),
+    ("regra_dados_honestos", _SAFE_RATIO, "rationale_for", "INFERRED", 0.95),
+    ("regras_estritas_de_design", _DEPTH_FIELD, "rationale_for", "INFERRED", 0.85),
     ("calibracao_cinco_partidas", _dom("playerstats"), "rationale_for", "INFERRED", 0.95),
     ("calibracao_cinco_partidas", _svc("rankingservice"), "rationale_for", "INFERRED", 0.95),
     ("calibracao_cinco_partidas", "regra_dados_honestos", "conceptually_related_to", "EXTRACTED", 1.0),

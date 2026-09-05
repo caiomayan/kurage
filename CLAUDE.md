@@ -56,7 +56,8 @@ document states implemented / prototype / planned plus a validation date.
   Engine; runs against real PostgreSQL 16 and Redis 7 via Testcontainers (43 at
   last run). H2, in-memory Redis and simulated services are forbidden. Every new
   migration needs an integration assertion.
-- `cd frontend && npm run lint && npm test && npm run build`.
+- `cd frontend && npm run lint && npm test && npm run build` (41 tests at last
+  run). Lint must end with zero errors **and** zero warnings.
 
 Report what actually ran. If Docker is unavailable, say the integration suite did
 not run rather than substituting mocks.

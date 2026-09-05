@@ -24,7 +24,20 @@ export function PlayerProfileHeader({
   currentRank = null,
   rankDelta = null,
 }: PlayerProfileHeaderProps) {
-  const kurageLevel = user.stats?.kurageLevel ?? 0;
+  // Null, not 0: an uncalibrated account has no level, and level 0 does not
+  // exist on the 1-10 scale (CLAUDE.md invariant 1).
+  const kurageLevel = user.stats?.kurageLevel ?? null;
+
+  // The ranking snapshot appears once for desktop and once for mobile; building
+  // its player once keeps the two in step when a field is added.
+  const snapshotPlayer = {
+    kurageId: user.kurageId,
+    username: user.username,
+    avatarUrl: user.avatarUrl,
+    country: user.country,
+    kurageElo: user.stats?.kurageElo ?? undefined,
+    isVerifiedPro: user.isVerifiedPro,
+  };
 
   return (
     <div className="relative w-full flex flex-col items-center text-center pb-10">
@@ -35,15 +48,8 @@ export function PlayerProfileHeader({
           <div className="hidden lg:block absolute right-0 top-0">
             <PlayerRankingSnapshot
               currentRank={currentRank}
-            player={{
-              kurageId: user.kurageId,
-              username: user.username,
-              avatarUrl: user.avatarUrl,
-              country: user.country,
-              kurageElo: user.stats?.kurageElo ?? undefined,
-              isVerifiedPro: user.isVerifiedPro,
-            }}
-            rankDelta={rankDelta}
+              player={snapshotPlayer}
+              rankDelta={rankDelta}
             />
           </div>
         )}
@@ -61,14 +67,14 @@ export function PlayerProfileHeader({
 
       {/* 2. Username in Editorial EB Garamond Font */}
       <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-        <h1 className="font-display text-[44px] sm:text-[56px] font-bold text-white tracking-tight leading-none select-text">
+        <h1 className="font-display text-[44px] sm:text-[56px] font-bold text-[var(--ink)] tracking-tight leading-none select-text">
           {user.username}
         </h1>
         <VerifiedProBadge subscriptionTier={user.subscriptionTier} />
       </div>
 
       {/* 3. Unified Tactical & Platform Badges (All expand-on-hover without backgrounds) */}
-      <div className="flex flex-wrap items-center justify-center gap-4 mt-4 text-[13px] font-sans text-stone-300">
+      <div className="flex flex-wrap items-center justify-center gap-4 mt-4 text-[13px] font-sans text-[var(--charcoal)]">
         {/* Country */}
         <CountryFlag country={user.country} expandOnHover={true} />
         
@@ -78,7 +84,7 @@ export function PlayerProfileHeader({
         )}
 
         {/* Kurage Level */}
-        {kurageLevel > 0 && (
+        {kurageLevel !== null && kurageLevel > 0 && (
           <KurageLevelIcon level={kurageLevel} expandOnHover={true} />
         )}
 
@@ -125,15 +131,8 @@ export function PlayerProfileHeader({
         <div className="block lg:hidden mt-5">
           <PlayerRankingSnapshot
             currentRank={currentRank}
-          player={{
-            kurageId: user.kurageId,
-            username: user.username,
-            avatarUrl: user.avatarUrl,
-            country: user.country,
-            kurageElo: user.stats?.kurageElo ?? undefined,
-            isVerifiedPro: user.isVerifiedPro,
-          }}
-          rankDelta={rankDelta}
+            player={snapshotPlayer}
+            rankDelta={rankDelta}
           />
         </div>
       )}

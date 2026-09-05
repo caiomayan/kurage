@@ -1,8 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
+import { gsap } from "gsap";
 import { cn } from "@/lib/utils";
+import { useGsapScope } from "@/lib/motion";
 import type { PlayerStats } from "@/types/user";
+import {
+  METRIC_SCALES,
+  fillOf,
+  safeRatio,
+  tierOf,
+  type MetricScale,
+  type TierName,
+} from "@/lib/metrics";
 
 interface PlayerMetricsRibbonProps {
   stats?: PlayerStats | null;
@@ -14,58 +24,72 @@ interface PlayerMetricsRibbonProps {
   winRate?: number | null;
 }
 
-interface TierInfo {
-  tierLabel: "Ruim" | "Médio" | "Bom" | "Excelente" | "Sem dados";
-  barPercent: number;
-  barColor: string;
+// The gauge has to stay visible at every tier: --ash and --stone are #333 and
+// #222, which disappear against the near-black surface.
+const TIER_TONE: Record<TierName, string> = {
+  Excelente: "var(--kurage-accent)",
+  Bom: "var(--ink)",
+  Médio: "var(--body)",
+  Ruim: "var(--charcoal)",
+};
+
+interface Metric {
+  label: string;
+  /** Null whenever the value is not measurable; never substituted with zero. */
+  value: number | null;
+  format: (value: number) => string;
+  scale: MetricScale;
+  caption: string;
 }
 
-function getRatingTier(val: number, hasData: boolean): TierInfo {
-  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
-  if (val >= 1.25) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
-  if (val >= 1.05) return { tierLabel: "Bom", barPercent: 72, barColor: "#ededed" };
-  if (val >= 0.90) return { tierLabel: "Médio", barPercent: 48, barColor: "#888888" };
-  return { tierLabel: "Ruim", barPercent: 25, barColor: "#ef4444" };
-}
+/** Animates a value from zero to its measured figure on first paint. */
+function MetricValue({
+  value,
+  format,
+}: {
+  value: number | null;
+  format: (value: number) => string;
+}) {
+  const ref = useRef<HTMLSpanElement | null>(null);
 
-function getKdTier(val: number, hasData: boolean): TierInfo {
-  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
-  if (val >= 1.30) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
-  if (val >= 1.05) return { tierLabel: "Bom", barPercent: 72, barColor: "#ededed" };
-  if (val >= 0.90) return { tierLabel: "Médio", barPercent: 48, barColor: "#888888" };
-  return { tierLabel: "Ruim", barPercent: 25, barColor: "#ef4444" };
-}
+  useGsapScope(
+    ref,
+    () => {
+      if (value === null || !ref.current) return;
+      const counter = { current: 0 };
+      gsap.to(counter, {
+        current: value,
+        duration: 0.9,
+        ease: "power2.out",
+        onUpdate: () => {
+          // Written straight to the node: driving a count-up through React state
+          // would re-render the whole ribbon on every frame (docs/pt/19 §7.6).
+          if (ref.current) ref.current.textContent = format(counter.current);
+        },
+      });
+    },
+    [value]
+  );
 
-function getAdrTier(val: number, hasData: boolean): TierInfo {
-  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
-  if (val >= 88.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
-  if (val >= 75.0) return { tierLabel: "Bom", barPercent: 72, barColor: "#ededed" };
-  if (val >= 65.0) return { tierLabel: "Médio", barPercent: 48, barColor: "#888888" };
-  return { tierLabel: "Ruim", barPercent: 25, barColor: "#ef4444" };
-}
+  if (value === null) {
+    return (
+      <span
+        className="font-display text-[26px] font-semibold leading-tight tracking-tight text-[var(--charcoal)] sm:text-[30px]"
+        title="Sem partidas válidas processadas"
+      >
+        —
+      </span>
+    );
+  }
 
-function getHsTier(val: number, hasData: boolean): TierInfo {
-  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
-  if (val >= 55.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
-  if (val >= 45.0) return { tierLabel: "Bom", barPercent: 70, barColor: "#ededed" };
-  if (val >= 35.0) return { tierLabel: "Médio", barPercent: 45, barColor: "#888888" };
-  return { tierLabel: "Ruim", barPercent: 22, barColor: "#ef4444" };
-}
-
-function getKastTier(val: number, hasData: boolean): TierInfo {
-  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
-  if (val >= 76.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
-  if (val >= 71.0) return { tierLabel: "Bom", barPercent: 72, barColor: "#ededed" };
-  if (val >= 65.0) return { tierLabel: "Médio", barPercent: 48, barColor: "#888888" };
-  return { tierLabel: "Ruim", barPercent: 25, barColor: "#ef4444" };
-}
-
-function getWinRateTier(val: number, hasData: boolean): TierInfo {
-  if (!hasData) return { tierLabel: "Sem dados", barPercent: 0, barColor: "#666" };
-  if (val >= 65.0) return { tierLabel: "Excelente", barPercent: 95, barColor: "var(--kurage-accent)" };
-  if (val >= 53.0) return { tierLabel: "Bom", barPercent: 70, barColor: "#ededed" };
-  if (val >= 45.0) return { tierLabel: "Médio", barPercent: 45, barColor: "#888888" };
-  return { tierLabel: "Ruim", barPercent: 22, barColor: "#ef4444" };
+  return (
+    <span
+      ref={ref}
+      className="font-display text-[26px] font-semibold leading-tight tracking-tight text-[var(--ink)] tabular-nums sm:text-[30px]"
+    >
+      {format(value)}
+    </span>
+  );
 }
 
 export function PlayerMetricsRibbon({
@@ -79,115 +103,131 @@ export function PlayerMetricsRibbon({
 }: PlayerMetricsRibbonProps) {
   const hasMatches = (stats?.matchesPlayed ?? 0) > 0;
 
-  // Compute metrics from stats if provided
-  const computedRating = stats?.hltvRating ?? hltvRating ?? null;
-  const computedKd = stats && stats.deaths > 0
-    ? stats.kills / stats.deaths
-    : stats && stats.kills > 0
-      ? stats.kills
-      : kdRatio ?? (hasMatches ? 0 : null);
-  const computedAdr = stats && stats.roundsPlayed > 0 ? stats.totalDamage / stats.roundsPlayed : adr;
-  const computedHs = stats && stats.kills > 0 ? (stats.headshots / stats.kills) * 100 : hsPercentage;
-  const computedKast = stats?.kastPercentage ?? kastPercentage ?? null;
-  const computedWinRate = stats && stats.matchesPlayed > 0
-    ? (stats.matchesWon / stats.matchesPlayed) * 100
-    : winRate;
+  // Every metric resolves to a number or to null; nothing falls back to zero.
+  const ratio = safeRatio;
 
-  const hasRating = hasMatches && computedRating != null;
-  const hasKd = hasMatches && computedKd != null;
-  const hasAdr = hasMatches && computedAdr != null;
-  const hasHs = hasMatches && computedHs != null;
-  const hasKast = hasMatches && computedKast != null;
-  const hasWinRate = hasMatches && computedWinRate != null;
+  const resolvedRating = hasMatches ? (stats?.hltvRating ?? hltvRating) : null;
+  const resolvedKd = hasMatches ? (ratio(stats?.kills, stats?.deaths) ?? kdRatio) : null;
+  const resolvedAdr = hasMatches ? (ratio(stats?.totalDamage, stats?.roundsPlayed) ?? adr) : null;
+  const resolvedHs = hasMatches
+    ? (() => {
+        const share = ratio(stats?.headshots, stats?.kills);
+        return share !== null ? share * 100 : hsPercentage;
+      })()
+    : null;
+  const resolvedKast = hasMatches ? (stats?.kastPercentage ?? kastPercentage) : null;
+  const resolvedWinRate = hasMatches
+    ? (() => {
+        const share = ratio(stats?.matchesWon, stats?.matchesPlayed);
+        return share !== null ? share * 100 : winRate;
+      })()
+    : null;
 
-  const metrics = [
+  const metrics: Metric[] = [
     {
-      label: "Rating 2.0",
-      value: hasRating ? computedRating.toFixed(2) : "—",
-      colorClass: "text-[var(--kurage-accent)]",
-      tier: getRatingTier(computedRating ?? 0, hasRating),
-      description: "HLTV Impacto",
+      // docs/pt/19 §4: the platform indicator is called simply "Rating". It is
+      // not the HLTV rating, which is a separate, future, 5v5-only figure and
+      // must never be presented as Kurage activity.
+      label: "Rating",
+      value: resolvedRating,
+      format: (v) => v.toFixed(2),
+      scale: METRIC_SCALES.rating,
+      caption: "Desempenho",
     },
     {
-      label: "K/D Ratio",
-      value: hasKd ? computedKd.toFixed(2) : "—",
-      colorClass: (computedKd ?? 0) >= 1.3 ? "text-white" : (computedKd ?? 0) >= 1.0 ? "text-stone-300" : "text-stone-400",
-      tier: getKdTier(computedKd ?? 0, hasKd),
-      description: "Eliminações",
+      label: "K/D",
+      value: resolvedKd,
+      format: (v) => v.toFixed(2),
+      scale: METRIC_SCALES.kd,
+      caption: "Eliminações",
     },
     {
-      label: "Dano / Round",
-      value: hasAdr ? computedAdr.toFixed(1) : "—",
-      colorClass: "text-white",
-      tier: getAdrTier(computedAdr ?? 0, hasAdr),
-      description: "ADR Médio",
+      label: "Dano / round",
+      value: resolvedAdr,
+      format: (v) => v.toFixed(1),
+      scale: METRIC_SCALES.adr,
+      caption: "ADR",
     },
     {
-      label: "Headshot %",
-      value: hasHs ? `${computedHs.toFixed(1)}%` : "—",
-      colorClass: "text-white",
-      tier: getHsTier(computedHs ?? 0, hasHs),
-      description: "Precisão",
+      label: "Headshot",
+      value: resolvedHs,
+      format: (v) => `${v.toFixed(1)}%`,
+      scale: METRIC_SCALES.headshot,
+      caption: "Precisão",
     },
     {
-      label: "KAST %",
-      value: hasKast ? `${computedKast.toFixed(1)}%` : "—",
-      colorClass: "text-white",
-      tier: getKastTier(computedKast ?? 0, hasKast),
-      description: "Consistência",
+      label: "KAST",
+      value: resolvedKast,
+      format: (v) => `${v.toFixed(1)}%`,
+      scale: METRIC_SCALES.kast,
+      caption: "Consistência",
     },
     {
-      label: "Win Rate",
-      value: hasWinRate ? `${computedWinRate.toFixed(1)}%` : "—",
-      colorClass: "text-white",
-      tier: getWinRateTier(computedWinRate ?? 0, hasWinRate),
-      description: "Vitórias",
+      label: "Vitórias",
+      value: resolvedWinRate,
+      format: (v) => `${v.toFixed(1)}%`,
+      scale: METRIC_SCALES.winRate,
+      caption: "Win rate",
     },
   ];
 
+  const ribbonRef = useRef<HTMLDivElement | null>(null);
+
+  useGsapScope(ribbonRef, () => {
+    gsap.from("[data-gauge]", {
+      scaleX: 0,
+      transformOrigin: "left center",
+      duration: 0.8,
+      ease: "power3.out",
+      stagger: 0.05,
+      delay: 0.15,
+    });
+  }, []);
+
   return (
-    <div className="w-full rounded-[12px] bg-[#080808]/70 backdrop-blur-md border border-white/[0.08] overflow-hidden transition-colors hover:border-white/[0.14]">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 lg:divide-x divide-white/[0.06]">
-        {metrics.map((metric, idx) => (
-          <div
-            key={metric.label}
-            className={cn(
-              "group/cell flex flex-col items-center justify-center p-4 sm:p-5 text-center transition-colors hover:bg-white/[0.02]",
-              idx === 0 && "bg-[var(--kurage-accent)]/[0.02]"
-            )}
-          >
-            {/* Metric Title */}
-            <span className="text-[10px] sm:text-[11px] font-sans font-semibold uppercase tracking-widest text-mute mb-1">
-              {metric.label}
-            </span>
-
-            {/* Metric Value */}
-            <span
-              className={cn(
-                "font-display text-[26px] sm:text-[30px] font-bold leading-tight tracking-tight",
-                metric.colorClass || "text-white"
-              )}
+    <div
+      ref={ribbonRef}
+      className="w-full overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--surface-card)]/70 backdrop-blur-md"
+    >
+      <div className="grid grid-cols-2 divide-y divide-[var(--divider-soft)] sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-6 lg:divide-x">
+        {metrics.map((metric) => {
+          const tier = metric.value === null ? null : tierOf(metric.value, metric.scale);
+          return (
+            <div
+              key={metric.label}
+              className="flex flex-col items-center justify-center p-4 text-center sm:p-5"
             >
-              {metric.value}
-            </span>
+              <span className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--body)] sm:text-[11px]">
+                {metric.label}
+              </span>
 
-            {/* Subtle Tier Gauge Bar */}
-            <div className="w-14 sm:w-16 h-[2.5px] rounded-full bg-white/[0.08] overflow-hidden my-2">
-              <div
-                className="h-full rounded-full transition-all duration-700 ease-out"
-                style={{
-                  width: `${metric.tier.barPercent}%`,
-                  backgroundColor: metric.tier.barColor,
-                }}
-              />
-            </div>
+              <MetricValue value={metric.value} format={metric.format} />
 
-            {/* Tier / Subtext Label */}
-            <div className="flex items-center gap-1 text-[10px] font-mono tracking-wider uppercase text-mute/70 group-hover/cell:text-mute transition-colors">
-              <span>{metric.tier.tierLabel}</span>
+              <div className="my-2 h-[2.5px] w-14 overflow-hidden rounded-full bg-[var(--hairline)] sm:w-16">
+                {metric.value !== null && tier && (
+                  <div
+                    data-gauge
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${fillOf(metric.value, metric.scale) * 100}%`,
+                      backgroundColor: TIER_TONE[tier],
+                    }}
+                  />
+                )}
+              </div>
+
+              <span
+                className={cn(
+                  "font-mono text-[10px] uppercase tracking-wider",
+                  tier ? "text-[var(--charcoal)]" : "text-[var(--mute)]"
+                )}
+              >
+                {tier ?? "Sem dados"}
+              </span>
+              <span className="sr-only">{metric.caption}</span>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
