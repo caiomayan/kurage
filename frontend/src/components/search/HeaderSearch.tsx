@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useId, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useCallback, useRef, useId, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -21,6 +21,10 @@ import {
 import { SiFaceit } from "react-icons/si";
 import { api } from "@/lib/api";
 import { searchEvents } from "@/lib/search-store";
+import { useAuth } from "@/lib/auth";
+import { searchHistoryStore } from "@/lib/search-history";
+import { shortcutsFor } from "@/lib/search-shortcuts";
+import { SearchEmptyState } from "./SearchEmptyState";
 import { QuickSearchResponse, SearchPlayerResult, SearchTeamResult } from "@/types/search";
 import { Avatar } from "@/components/ui/Avatar";
 import { KurageLevelIcon } from "@/components/ui/KurageLevelIcon";
@@ -45,6 +49,32 @@ export function HeaderSearch({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const mounted = useSyncExternalStore(subscribeToClient, () => true, () => false);
+
+  // History belongs to the account that is signed in right now. Keying the
+  // reads by that id is what stops a logout or an account switch from showing
+  // someone else's terms (docs/pt/19 §8).
+  const { user } = useAuth();
+  const accountId = user?.kurageId ?? null;
+
+  // History is device-local state that React does not own, so it is subscribed
+  // to rather than mirrored into component state. The server snapshot is empty,
+  // which is also the honest answer: history never leaves the device.
+  const subscribeHistory = useCallback(
+    (listener: () => void) => searchHistoryStore.subscribe(listener),
+    []
+  );
+  const recents = useSyncExternalStore(
+    subscribeHistory,
+    () => searchHistoryStore.getSnapshot(accountId),
+    searchHistoryStore.getServerSnapshot
+  );
+
+  const shortcuts = shortcutsFor({
+    isAuthenticated: Boolean(user),
+    kurageId: user?.kurageId ?? null,
+  });
+
+  const remember = (term: string) => searchHistoryStore.remember(accountId, term);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +132,7 @@ export function HeaderSearch({
   });
 
   const handleSelectPlayer = (player: SearchPlayerResult) => {
+    remember(query);
     onOpenChange(false);
     setQuery("");
     setDebouncedQuery("");
@@ -110,6 +141,7 @@ export function HeaderSearch({
   };
 
   const handleSelectTeam = (team: SearchTeamResult) => {
+    remember(query);
     onOpenChange(false);
     setQuery("");
     setDebouncedQuery("");
@@ -251,7 +283,7 @@ export function HeaderSearch({
 
         {/* ── 3. BESPOKE SEARCH RESULTS PANEL (Brand New Architecture) ── */}
         <AnimatePresence>
-          {isOpen && query.trim().length > 0 && (
+          {isOpen && (
             <motion.div
               layout
               initial={{ opacity: 0, y: 10, scale: 0.98 }}
@@ -273,8 +305,31 @@ export function HeaderSearch({
 
               {/* Scrollable Results Stream */}
               <div className="relative z-10 p-3 overflow-y-auto max-h-[calc(75vh-44px)] flex flex-col gap-3.5 scrollbar-thin">
+                {/* 0. Nothing typed yet: private recents and real destinations,
+                    all from memory so opening the panel costs no request. */}
+                {query.trim().length === 0 && (
+                  <SearchEmptyState
+                    recents={recents}
+                    shortcuts={shortcuts}
+                    onPickRecent={(term) => {
+                      setQuery(term);
+                      setDebouncedQuery(term);
+                      inputRef.current?.focus();
+                    }}
+                    onForgetRecent={(term) => searchHistoryStore.forget(accountId, term)}
+                    onClearRecents={() => searchHistoryStore.clear(accountId)}
+                    onPickShortcut={(href) => {
+                      onOpenChange(false);
+                      setQuery("");
+                      setDebouncedQuery("");
+                      inputRef.current?.blur();
+                      router.push(href);
+                    }}
+                  />
+                )}
+
                 {/* 1. Loading Skeleton */}
-                {isLoading && (
+                {query.trim().length > 0 && isLoading && (
                   <div className="flex flex-col gap-2 p-1 animate-pulse">
                     <div className="h-20 rounded-[10px] bg-white/[0.03] border border-white/[0.06]" />
                     <div className="h-12 rounded-[8px] bg-white/[0.02] border border-white/[0.04]" />

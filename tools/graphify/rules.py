@@ -31,6 +31,8 @@ _IDENTITY = "frontend_src_lib_identity_resolveidentity"
 _THEME = "frontend_src_lib_theme_createthemecontroller"
 _SAFE_RATIO = "frontend_src_lib_metrics_saferatio"
 _DEPTH_FIELD = "frontend_src_components_profile_profiledepthfield_profiledepthfield"
+_SEARCH_HISTORY = "frontend_src_lib_search_history_historykey"
+_SHORTCUTS = "frontend_src_lib_search_shortcuts_shortcutsfor"
 
 D05 = "docs/pt/05_game_servers_subsystem.md"
 D07 = "docs/pt/07_frontend_design_system.md"
@@ -173,6 +175,12 @@ CONCEPTS: list[tuple[str, str, str, str]] = [
      "Qualquer divergencia entre documentacao e codigo deve ser corrigida no MESMO pull request da "
      "implementacao. A auditoria 08 e o plano 19 sao a referencia factual; os documentos 01 a 07 "
      "descrevem componentes e intencao."),
+    (D19, "historico_de_busca_privado", "Search History Is Private and Local",
+     "O historico de busca fica no dispositivo, em namespace por conta, e nunca e enviado ao "
+     "servidor. Entrar ou sair da conta nao pode expor o que a outra sessao digitou, cada entrada e "
+     "apagavel e o painel nao publica termos digitados por outras pessoas. Um bloco de mais "
+     "procurados so e permitido com coleta real, janela temporal, amostra minima e protecao contra "
+     "manipulacao; enquanto o trafego for pequeno, fabricar popularidade e proibido."),
     (D15, "backup_so_vale_com_restore", "A Backup Is Only Valid After a Restore",
      "Meta da alfa: RPO de 24 horas e RTO de 4 horas. Um backup so e considerado valido apos um "
      "restore comprovado em banco isolado. Redis nao e backup. Nunca testar pg_restore --clean no "
@@ -232,6 +240,9 @@ LINKS: list[tuple[str, str, str, str, float]] = [
     ("fluxo_de_branches", "documentacao_no_mesmo_pr", "conceptually_related_to", "INFERRED", 0.75),
     ("fluxo_de_branches", "testes_com_servicos_reais", "conceptually_related_to", "INFERRED", 0.85),
     ("backup_so_vale_com_restore", "gate_de_producao", "conceptually_related_to", "EXTRACTED", 1.0),
+    ("historico_de_busca_privado", _SEARCH_HISTORY, "rationale_for", "INFERRED", 0.95),
+    ("historico_de_busca_privado", "regra_dados_honestos", "conceptually_related_to", "INFERRED", 0.75),
+    ("documentacao_no_mesmo_pr", _SHORTCUTS, "rationale_for", "INFERRED", 0.65),
 ]
 
 # (id, label, member slugs, relation, doc)
