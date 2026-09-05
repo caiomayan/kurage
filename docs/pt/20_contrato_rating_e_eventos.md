@@ -55,10 +55,10 @@ assistência nem resultado.
 Sem os eventos da seção 7, **nada aqui roda de verdade**: `matchesPlayed` nunca
 incrementa, a calibração jamais completa, e nem ELO nem Rating têm entrada.
 
-O lado do servidor **já está implementado**: `POST /plugin/v1/servers/{id}/rounds`
-recebe, valida, guarda o evento cru e fecha unidades. Falta o plugin
-`Kurage.Core` emitir os eventos — é a última peça, e até ela existir o modelo
-continua sem entrada em produção.
+**Implementado dos dois lados.** `POST /plugin/v1/servers/{id}/rounds` recebe,
+valida, guarda o evento cru e fecha unidades; o `Kurage.Core` rastreia o round e
+emite o evento ao final, com fila de reenvio para que uma falha de rede não perca
+o round. O que falta agora é rodar com jogo real e recalibrar as referências.
 
 ## 3. Unidade válida por modo
 
@@ -194,13 +194,35 @@ pelos rounds jogados em cada um**.
 | `DPM_ref` | — | — | — | 1,30 |
 | `HS_ref` | — | — | — | 0,45 |
 
-> **Estes números são um ponto de partida, não uma medida.** Precisam ser
-> recalibrados sobre dados reais antes de qualquer ativação pública — cerca de
-> 10.000 rounds para o retake. Publicá-los sem essa checagem seria exatamente o
-> tipo de número fabricado que a auditoria proíbe. As referências de 5v5 e DM só
+> **Estes números foram escolhidos antes de existir um único round do Kurage.**
+> Se os jogadores daqui produzem mais do que a referência supõe, todo mundo
+> aparece acima de 1.00 e o número deixa de significar "médio" — a escala fica
+> deslocada.
+>
+> Isso não se resolve adivinhando melhor, se resolve medindo, e por isso existe
+> o `ReferenceCalibrationService` da seção 5.4. As referências de 5v5 e DM só
 > podem ser fixadas quando esses modos existirem.
 
-### 5.4. Confiabilidade e anti-farming
+### 5.4. Medir a referência em vez de estimá-la
+
+`ReferenceCalibrationService` calcula, a partir dos rounds realmente gravados,
+qual seria a referência observada de cada lado, e a compara com a embarcada,
+mostrando o desvio.
+
+- lê **somente rounds já absorvidos por uma unidade fechada**: um bloco em
+  andamento ainda não é amostra completa;
+- abaixo de **2.000 rounds por lado** ele diz "amostra insuficiente" e não
+  publica número — uma média sobre poucos rounds é tão arbitrária quanto o chute
+  que ela pretende substituir;
+- ele **não altera nada**. Publicar novas referências é editar
+  `CompetitiveScales` e subir a versão do algoritmo, uma decisão deliberada:
+  trocar os números por baixo invalidaria silenciosamente todo Rating já
+  calculado.
+
+Com isso, recalibrar deixa de ser uma preocupação em aberto e vira um
+procedimento com evidência: rodar o relatório, ler o desvio, decidir.
+
+### 5.5. Confiabilidade e anti-farming
 
 **Encolhimento para a base**, aplicado por modo antes da agregação:
 
@@ -218,7 +240,7 @@ estratégica que o documento 19 §5 pede.
 **Volume não compra Rating.** É média ponderada, nunca soma: jogar mais aumenta a
 confiabilidade, não o número.
 
-### 5.5. Agregação entre modos
+### 5.6. Agregação entre modos
 
 ```
 conf_m       = n_m / (n_m + 3)

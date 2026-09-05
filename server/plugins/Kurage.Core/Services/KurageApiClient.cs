@@ -80,6 +80,42 @@ public class KurageApiClient
         }
     }
 
+    /// <summary>
+    /// Envia um round concluído.
+    ///
+    /// A API responde 202 quando aceita e 200 quando reconhece o reenvio de um
+    /// round que já tinha registrado — os dois são sucesso. Um reenvio depois de
+    /// falha de rede é comportamento esperado, não erro, e a chave de
+    /// idempotência garante que ele não conte duas vezes.
+    /// </summary>
+    public async Task<bool> SendRoundAsync(RoundEventPayload payload)
+    {
+        try
+        {
+            var url = $"{_config.ApiUrl.TrimEnd('/')}/plugin/v1/servers/{_config.ServerId}/rounds";
+            var json = JsonSerializer.Serialize(payload, _jsonOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync(url, content);
+            if (response.IsSuccessStatusCode)
+            {
+                return true;
+            }
+
+            _logger.LogWarning(
+                "[Kurage.Core] Round {Sequence} recusado com status {StatusCode}",
+                payload.Sequence, response.StatusCode);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                "[Kurage.Core] Falha ao enviar round {Sequence}: {Message}",
+                payload.Sequence, ex.Message);
+            return false;
+        }
+    }
+
     public async Task<PlayerProfileSummary?> GetPlayerSummaryAsync(string steamId64)
     {
         try

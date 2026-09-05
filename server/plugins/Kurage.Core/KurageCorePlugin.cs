@@ -33,6 +33,22 @@ public class KurageCorePlugin : BasePlugin, IPluginConfig<KurageCoreConfig>
     private static readonly PluginCapability<IKurageCoreContext> CoreCapability = new(KurageCoreCapability.Name);
     private bool _isMapLoaded = false;
 
+    // Emissão de rounds. Sem isto o modelo competitivo não recebe entrada: o
+    // heartbeat não carrega participação por round, então `matchesPlayed` nunca
+    // avançaria e a calibração jamais completaria.
+    private readonly RoundTracker _roundTracker = new();
+    private Guid _sessionId = Guid.NewGuid();
+    private long _roundSequence;
+    private DateTimeOffset _roundStartedAt = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Rounds que a API ainda não confirmou. Uma falha de rede não pode perder
+    /// um round; a chave de idempotência torna o reenvio seguro. A fila é
+    /// limitada para que um servidor sem conectividade não cresça sem limite.
+    /// </summary>
+    private readonly Queue<RoundEventPayload> _pendingRounds = new();
+    private const int MaxPendingRounds = 60;
+
     public void OnConfigParsed(KurageCoreConfig config)
     {
         config.ApiUrl = GetEnvironmentValue("KURAGE_API_URL") ?? config.ApiUrl;
@@ -101,6 +117,10 @@ public class KurageCorePlugin : BasePlugin, IPluginConfig<KurageCoreConfig>
     private void OnMapStart(string mapName)
     {
         _isMapLoaded = true;
+        // Cada mapa é uma sessão nova: a sequência recomeça e não colide com a
+        // do mapa anterior, que a API já aceitou.
+        _sessionId = Guid.NewGuid();
+        _roundSequence = 0;
         SendHeartbeat();
     }
 
@@ -178,6 +198,175 @@ public class KurageCorePlugin : BasePlugin, IPluginConfig<KurageCoreConfig>
             Logger.LogWarning("[Kurage.Core] Falha ao coletar dados para heartbeat: {Message}", ex.Message);
         }
     }
+
+    [GameEventHandler]
+    public HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
+    {
+        _roundTracker.StartRound();
+        _roundStartedAt = DateTimeOffset.UtcNow;
+
+        // Só quem já está em um lado quando o round começa participa dele. Quem
+        // conecta no meio ou está assistindo entra a partir do round seguinte,
+        // como o documento 20 §3 exige.
+        foreach (var player in Utilities.GetPlayers())
+        {
+            if (player == null || !player.IsValid || player.IsBot) continue;
+            var side = SideOf(player.TeamNum);
+            if (side != null)
+            {
+                _roundTracker.RegisterParticipant(player.SteamID, side);
+            }
+        }
+        return HookResult.Continue;
+    }
+
+    [GameEventHandler]
+    public HookResult OnPlayerHurt(EventPlayerHurt @event, GameEventInfo info)
+    {
+        var attacker = @event.Attacker;
+        var victim = @event.Userid;
+        if (attacker == null || !attacker.IsValid || attacker.IsBot) return HookResult.Continue;
+        // Dano em si mesmo e fogo amigo não contam como produção.
+        if (victim != null && victim.IsValid && victim.TeamNum == attacker.TeamNum) return HookResult.Continue;
+
+        _roundTracker.RecordDamage(attacker.SteamID, @event.DmgHealth);
+        return HookResult.Continue;
+    }
+
+    [GameEventHandler]
+    public HookResult OnPlayerDeath(EventPlayerDeath @event, GameEventInfo info)
+    {
+        var victim = @event.Userid;
+        if (victim == null || !victim.IsValid || victim.IsBot) return HookResult.Continue;
+
+        var attacker = @event.Attacker;
+        var assister = @event.Assister;
+        ulong? killer = attacker != null && attacker.IsValid && !attacker.IsBot
+            ? attacker.SteamID
+            : null;
+        ulong? assist = assister != null && assister.IsValid && !assister.IsBot
+            ? assister.SteamID
+            : null;
+
+        var atSeconds = (DateTimeOffset.UtcNow - _roundStartedAt).TotalSeconds;
+        _roundTracker.RecordDeath(victim.SteamID, killer, assist, atSeconds);
+        return HookResult.Continue;
+    }
+
+    [GameEventHandler]
+    public HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
+    {
+        if (!_roundTracker.RoundInProgress) return HookResult.Continue;
+        _roundTracker.EndRound();
+
+        try
+        {
+            var participants = _roundTracker.Snapshot();
+            if (participants.Count == 0) return HookResult.Continue;
+
+            // 3 é CT e 2 é TR na numeração de times do CS2.
+            var winningSide = @event.Winner switch
+            {
+                3 => "CT",
+                2 => "TR",
+                _ => null
+            };
+
+            var payload = new RoundEventPayload
+            {
+                SessionId = _sessionId.ToString(),
+                Sequence = ++_roundSequence,
+                IdempotencyKey = Guid.NewGuid().ToString(),
+                Map = Server.MapName,
+                EndedAt = DateTimeOffset.UtcNow,
+                GameMode = Config.GameMode,
+                WinningSide = winningSide,
+                Players = participants.Select(p => new RoundPlayerPayload
+                {
+                    SteamId64 = p.SteamId.ToString(),
+                    Side = p.Side,
+                    Kills = p.Kills,
+                    Deaths = p.Deaths,
+                    Assists = p.Assists,
+                    Damage = p.Damage,
+                    Survived = !p.Died,
+                    WasTraded = p.WasTraded,
+                    OpeningKill = p.OpeningKill,
+                    OpeningDeath = p.OpeningDeath
+                }).ToList()
+            };
+
+            EnqueueRound(payload);
+            FlushPendingRounds();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning("[Kurage.Core] Falha ao montar o round: {Message}", ex.Message);
+        }
+        return HookResult.Continue;
+    }
+
+    /// <summary>
+    /// Coloca o round na fila de envio, descartando o mais antigo quando ela
+    /// enche. Perder o round mais velho é preferível a crescer sem limite num
+    /// servidor sem conectividade.
+    /// </summary>
+    private void EnqueueRound(RoundEventPayload payload)
+    {
+        if (_pendingRounds.Count >= MaxPendingRounds)
+        {
+            var dropped = _pendingRounds.Dequeue();
+            Logger.LogWarning(
+                "[Kurage.Core] Fila cheia: round {Sequence} descartado sem confirmação",
+                dropped.Sequence);
+        }
+        _pendingRounds.Enqueue(payload);
+    }
+
+    /// <summary>
+    /// Tenta enviar tudo que está pendente, em ordem.
+    ///
+    /// Para no primeiro que falhar para não furar a sequência: a API recusa
+    /// sequência fora de ordem, e reenviar o resto antes do que falhou só
+    /// produziria 409.
+    /// </summary>
+    private void FlushPendingRounds()
+    {
+        if (_apiClient == null || _pendingRounds.Count == 0) return;
+
+        var batch = _pendingRounds.ToArray();
+        _pendingRounds.Clear();
+
+        Task.Run(async () =>
+        {
+            var unsent = new List<RoundEventPayload>();
+            foreach (var round in batch)
+            {
+                if (unsent.Count > 0)
+                {
+                    unsent.Add(round);
+                    continue;
+                }
+                var sent = await _apiClient.SendRoundAsync(round);
+                if (!sent) unsent.Add(round);
+            }
+
+            if (unsent.Count > 0)
+            {
+                Server.NextFrame(() =>
+                {
+                    foreach (var round in unsent) EnqueueRound(round);
+                });
+            }
+        });
+    }
+
+    private static string? SideOf(int teamNum) => teamNum switch
+    {
+        3 => "CT",
+        2 => "TR",
+        _ => null
+    };
 
     [GameEventHandler]
     public HookResult OnPlayerConnectFull(EventPlayerConnectFull @event, GameEventInfo info)
