@@ -127,3 +127,7 @@ gitleaks-report.*
 # frontend/public/thumbs with clean map names.
 /thumbs/
 /frontend/public/thumbs/*_png*.png
+
+# Knowledge graph artifacts. Derived from the source tree by the graphify skill
+# and rebuilt on demand; keeping them out of Git avoids noisy diffs in every PR.
+graphify-out/
