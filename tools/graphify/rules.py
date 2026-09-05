@@ -27,6 +27,8 @@ def _dom(name: str) -> str:
 
 
 _HANDLER = f"{_B}exception_globalexceptionhandler_globalexceptionhandler"
+_IDENTITY = "frontend_src_lib_identity_resolveidentity"
+_THEME = "frontend_src_lib_theme_createthemecontroller"
 
 D05 = "docs/pt/05_game_servers_subsystem.md"
 D07 = "docs/pt/07_frontend_design_system.md"
@@ -217,6 +219,9 @@ LINKS: list[tuple[str, str, str, str, float]] = [
     ("monolito_modular", "postgres_fonte_unica", "conceptually_related_to", "EXTRACTED", 1.0),
     ("inventario_sem_valor_economico", _svc("inventoryservice"), "rationale_for", "INFERRED", 0.85),
     ("perfil_usa_tema_do_titular", "cargo_e_plano_independentes", "conceptually_related_to", "EXTRACTED", 1.0),
+    ("perfil_usa_tema_do_titular", _THEME, "rationale_for", "INFERRED", 0.95),
+    ("cargo_e_plano_independentes", _IDENTITY, "rationale_for", "INFERRED", 0.95),
+    ("plano_mare_unico", _IDENTITY, "rationale_for", "INFERRED", 0.85),
     ("level_s_top_30", "calibracao_cinco_partidas", "conceptually_related_to", "EXTRACTED", 1.0),
     ("regras_estritas_de_design", "perfil_usa_tema_do_titular", "conceptually_related_to", "INFERRED", 0.75),
     ("documentacao_no_mesmo_pr", "regra_dados_honestos", "conceptually_related_to", "INFERRED", 0.85),

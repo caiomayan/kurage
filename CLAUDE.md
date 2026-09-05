@@ -51,9 +51,9 @@ document states implemented / prototype / planned plus a validation date.
 
 ## Testing
 
-- `cd backend && ./mvnw test` — unit tests (161 at last run).
+- `cd backend && ./mvnw test` — unit tests (156 at last run).
 - `cd backend && ./mvnw verify -Pintegration` — requires a running Docker
-  Engine; runs against real PostgreSQL 16 and Redis 7 via Testcontainers (30 at
+  Engine; runs against real PostgreSQL 16 and Redis 7 via Testcontainers (43 at
   last run). H2, in-memory Redis and simulated services are forbidden. Every new
   migration needs an integration assertion.
 - `cd frontend && npm run lint && npm test && npm run build`.
