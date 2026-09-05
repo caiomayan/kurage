@@ -128,6 +128,10 @@ gitleaks-report.*
 /thumbs/
 /frontend/public/thumbs/*_png*.png
 
+# Python bytecode from the graph tooling in tools/.
+__pycache__/
+*.pyc
+
 # Knowledge graph artifacts. Derived from the source tree by the graphify skill
 # and rebuilt on demand; keeping them out of Git avoids noisy diffs in every PR.
 graphify-out/

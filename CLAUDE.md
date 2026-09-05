@@ -87,6 +87,7 @@ Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- After modifying code, rebuild with `python tools/graphify/rebuild.py`, then `graphify export html` and `graphify export wiki`. Do **not** run `graphify update .`: it rescans the whole repository, pulls `docs/en` back in as a duplicate of every `docs/pt` concept, and drops the curated labels and the invariants layer.
+- The invariants above exist in the graph as concept nodes defined in `tools/graphify/rules.py`, linked to the code they govern. If you rename or move a symbol they point at, the rebuild fails loudly — update `rules.py` in the same pull request.
 - The graph shows what the code *does*, never what is *ready*. Readiness comes from `docs/pt/08` and `docs/pt/19` — a well-connected ranking neighborhood does not mean the competitive loop exists.
 - `graphify-out/` is gitignored. Rebuilding is cheap and needs no API key.
