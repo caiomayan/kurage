@@ -34,6 +34,9 @@ _DEPTH_FIELD = "frontend_src_components_profile_profiledepthfield_profiledepthfi
 _SEARCH_HISTORY = "frontend_src_lib_search_history_historykey"
 _SHORTCUTS = "frontend_src_lib_search_shortcuts_shortcutsfor"
 _PLAYTIME = "backend_src_main_java_com_kurage_api_service_playtimeservice_playtimeservice"
+_RATING = "backend_src_main_java_com_kurage_api_competitive_ratingcalculator_ratingcalculator"
+_ELO = "backend_src_main_java_com_kurage_api_competitive_elocalculator_elocalculator"
+_INGESTION = "backend_src_main_java_com_kurage_api_service_roundingestionservice_roundingestionservice"
 
 D05 = "docs/pt/05_game_servers_subsystem.md"
 D07 = "docs/pt/07_frontend_design_system.md"
@@ -182,6 +185,22 @@ CONCEPTS: list[tuple[str, str, str, str]] = [
      "apagavel e o painel nao publica termos digitados por outras pessoas. Um bloco de mais "
      "procurados so e permitido com coleta real, janela temporal, amostra minima e protecao contra "
      "manipulacao; enquanto o trafego for pequeno, fabricar popularidade e proibido."),
+    (D19, "elo_mede_sucesso_rating_mede_contribuicao", "ELO Measures Success, Rating Measures Contribution",
+     "Sao duas medidas independentes que se correlacionam, e nenhuma deriva da outra. O ELO olha "
+     "apenas para o resultado e para a forca do adversario: ele nao sabe quantos abates o jogador "
+     "fez. O Rating olha apenas para a producao individual: ele nao sabe se o round foi vencido. "
+     "Derivar um do outro transformaria a correlacao em tautologia e destruiria a leitura mais util "
+     "do par, que e a divergencia — quem carrega time que perde tem Rating alto e ELO baixo."),
+    (D19, "unidade_valida_e_versionada", "Every Computed Unit Carries Its Version",
+     "Uma unidade valida de retake sao 20 rounds, acumulaveis entre sessoes, e cinco delas concluem "
+     "a calibracao. Toda unidade fechada grava a versao do algoritmo que a produziu, junto do evento "
+     "cru que a originou. Corrigir uma formula nunca e editar valores calculados: e reprocessar os "
+     "eventos sob uma versao nova, preservando as linhas antigas para auditoria e disputa."),
+    (D19, "ingestao_idempotente", "Round Ingestion Is Idempotent and All-or-Nothing",
+     "Um plugin que perdeu a resposta reenvia o mesmo round; isso e esperado e nao pode contar duas "
+     "vezes. A chave de idempotencia garante isso no banco. Sequencia fora de ordem e modo divergente "
+     "do registro sao recusados com 409, e o modo vem sempre do PostgreSQL — um evento nunca "
+     "reclassifica o servidor. Nenhum round e aplicado pela metade."),
     (D19, "level_s_diario_e_desempate", "Level S Is Granted Daily, Never Live",
      "O Level S e recalculado uma vez por dia, a meia-noite, e vale o dia inteiro que comeca: quem "
      "estiver no topo elegivel naquele instante mantem o S mesmo que o ELO mude no meio do dia. Sao "
@@ -253,6 +272,14 @@ LINKS: list[tuple[str, str, str, str, float]] = [
     ("fluxo_de_branches", "testes_com_servicos_reais", "conceptually_related_to", "INFERRED", 0.85),
     ("backup_so_vale_com_restore", "gate_de_producao", "conceptually_related_to", "EXTRACTED", 1.0),
     ("level_s_diario_e_desempate", _svc("rankingservice"), "rationale_for", "INFERRED", 0.95),
+    ("elo_mede_sucesso_rating_mede_contribuicao", _RATING, "rationale_for", "INFERRED", 0.95),
+    ("elo_mede_sucesso_rating_mede_contribuicao", _ELO, "rationale_for", "INFERRED", 0.95),
+    ("unidade_valida_e_versionada", _INGESTION, "rationale_for", "INFERRED", 0.95),
+    ("unidade_valida_e_versionada", "calibracao_cinco_partidas", "conceptually_related_to", "EXTRACTED", 1.0),
+    ("ingestao_idempotente", _INGESTION, "rationale_for", "INFERRED", 0.95),
+    ("ingestao_idempotente", "concorrencia_sem_sucesso_falso", "conceptually_related_to", "INFERRED", 0.85),
+    ("ingestao_idempotente", "identidade_fixa_de_servidor", "conceptually_related_to", "INFERRED", 0.85),
+    ("motor_de_partida_ausente", _INGESTION, "conceptually_related_to", "INFERRED", 0.75),
     ("level_s_diario_e_desempate", "calibracao_cinco_partidas", "conceptually_related_to", "EXTRACTED", 1.0),
     ("horas_jogadas_medidas", _PLAYTIME, "rationale_for", "INFERRED", 0.95),
     ("horas_jogadas_medidas", "regra_dados_honestos", "conceptually_related_to", "INFERRED", 0.85),

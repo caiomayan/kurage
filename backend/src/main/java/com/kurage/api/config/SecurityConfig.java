@@ -50,6 +50,11 @@ public class SecurityConfig {
 
                 // Rotas públicas (Plugins CS2, Heartbeat, Inventário de jogadores, Perfis, Buscas)
                 .requestMatchers("/auth/**", "/error", "/leaderboard/**", "/search/**", "/servers/**").permitAll()
+                // A API do plugin nao usa sessao: ela se autentica com a
+                // credencial propria do servidor, validada no servico com hash
+                // SHA-256 e comparacao em tempo constante. Liberar aqui apenas
+                // tira o filtro de JWT do caminho; a fronteira continua fechada.
+                .requestMatchers("/plugin/v1/**").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/inventory/**", "/api/inventory/**", "/api/cstrike/**", "/api/cstrike/inventory/**", "/api/equipped/**", "/equipped/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/users/**", "/teams/**").permitAll()

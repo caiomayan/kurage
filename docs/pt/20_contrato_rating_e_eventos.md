@@ -2,13 +2,17 @@
 
 [Voltar ao índice](./00_index.md)
 
-**Estado:** **proposta para análise do proprietário. Nada aqui está implementado
-nem ativo**, exceto o que estiver marcado como decidido.
+**Estado:** aprovado pelo proprietário em 05/09/2026. O modelo competitivo e a
+ingestão de rounds estão **implementados**; o plugin ainda não emite os eventos,
+então nada roda em produção. As referências numéricas continuam pendentes de
+recalibração contra dados reais.
 **Última atualização:** 05/09/2026.
 
 Este documento fecha os detalhes que o [plano de evolução](./19_plano_evolucao_identidade_rating_perfil.md)
-§11 proíbe a implementação de inventar. Enquanto não houver aprovação explícita,
-nenhum número daqui pode afetar o ranking público.
+§11 proíbe a implementação de inventar. Os pesos e referências foram definidos
+pela implementação sob autorização do proprietário e vivem em
+`CompetitiveScales`, versionados: recalibrar é publicar uma versão nova, nunca
+editar valores já calculados.
 
 ---
 
@@ -48,10 +52,13 @@ Hoje o servidor envia apenas o heartbeat, com `steamId64`, time, `kills`,
 `deaths`, `ping` e `isAlive`. Não há participação por round, dano, sobrevivência,
 assistência nem resultado.
 
-Sem os eventos da seção 7, **nada nesta proposta pode funcionar**: `matchesPlayed`
-nunca incrementa, a calibração jamais completa, e nem ELO nem Rating têm entrada.
-O contrato de eventos é a primeira entrega da etapa 5 — antes de qualquer
-fórmula.
+Sem os eventos da seção 7, **nada aqui roda de verdade**: `matchesPlayed` nunca
+incrementa, a calibração jamais completa, e nem ELO nem Rating têm entrada.
+
+O lado do servidor **já está implementado**: `POST /plugin/v1/servers/{id}/rounds`
+recebe, valida, guarda o evento cru e fecha unidades. Falta o plugin
+`Kurage.Core` emitir os eventos — é a última peça, e até ela existir o modelo
+continua sem entrada em produção.
 
 ## 3. Unidade válida por modo
 
@@ -411,5 +418,7 @@ de auditoria durável, que ainda não existe e é pré-requisito para expô-las.
 
 ---
 
-Nenhuma parte das seções 4 a 8 e 10 deve ser implementada antes da aprovação do
-proprietário. As seções 3 (retake) e 9 já refletem decisões tomadas.
+**Estado por seção:** 3 (retake), 4, 5, 7 e 9 estão implementadas. A seção 6
+(HLTV) aguarda o modo 5v5 existir. A seção 8 tem o armazenamento cru pronto; a
+purga aos 12 meses ainda não tem rotina. A seção 10 continua proposta e é
+pré-requisito para expor qualquer ação administrativa.
