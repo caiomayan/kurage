@@ -23,12 +23,17 @@
     --ash: #333333;
     --stone: #222222;
 
-    /* Kurage identity accent. Subscribers replace the sea-glass current with Maré coral. */
+    /* Kurage identity accent. Sea glass is the default current; role and
+       subscription repaint it in the order Owner > Admin > Maré (docs/pt/19 §2.1). */
     --kurage-accent: #a9c8c0;
     --kurage-accent-rgb: 169, 200, 192;
     --kurage-accent-glow: rgba(169, 200, 192, 0.18);
     --mare-accent: #ff4d6d;
     --mare-accent-rgb: 255, 77, 109;
+    --owner-accent: #e9b95f;
+    --owner-accent-rgb: 233, 185, 95;
+    --admin-accent: #29d3b0;
+    --admin-accent-rgb: 41, 211, 176;
     
     /* Borders & Dividers - Ultra Fine */
     --hairline: rgba(255, 255, 255, 0.06);
@@ -49,11 +54,29 @@
     --link: #ededed;
   }
 
+  /* Precedence is resolved in lib/identity.ts before it reaches the DOM, so the
+     root ever carries a single identity and these blocks never compete. Semantic
+     success and error colours are deliberately left alone: a theme must not make
+     a failure state harder to read. */
   :root[data-kurage-theme="mare"] {
     --kurage-accent: var(--mare-accent);
     --kurage-accent-rgb: var(--mare-accent-rgb);
     --kurage-accent-glow: rgba(var(--mare-accent-rgb), 0.24);
     --link: var(--mare-accent);
+  }
+
+  :root[data-kurage-theme="admin"] {
+    --kurage-accent: var(--admin-accent);
+    --kurage-accent-rgb: var(--admin-accent-rgb);
+    --kurage-accent-glow: rgba(var(--admin-accent-rgb), 0.24);
+    --link: var(--admin-accent);
+  }
+
+  :root[data-kurage-theme="owner"] {
+    --kurage-accent: var(--owner-accent);
+    --kurage-accent-rgb: var(--owner-accent-rgb);
+    --kurage-accent-glow: rgba(var(--owner-accent-rgb), 0.24);
+    --link: var(--owner-accent);
   }
 }
 

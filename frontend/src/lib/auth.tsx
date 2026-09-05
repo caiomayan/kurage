@@ -17,6 +17,8 @@ import {
   refreshToken,
 } from "@/lib/api";
 import { REDIRECT_STORAGE_KEY, API_BASE_URL } from "@/lib/constants";
+import { resolveIdentity } from "./identity.ts";
+import { themeController } from "./theme.ts";
 
 export { REDIRECT_STORAGE_KEY };
 
@@ -39,18 +41,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserWithStats | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // The viewer's own identity. A profile page pushes its owner's identity on top
+  // of this through the same controller, so the two never race for the root
+  // attribute the way two independent writers did before (docs/pt/19 §2.2).
+  const viewerIdentity = resolveIdentity(user);
   useEffect(() => {
-    const root = document.documentElement;
-    if (user?.subscriptionTier === "MARE") {
-      root.dataset.kurageTheme = "mare";
-    } else {
-      delete root.dataset.kurageTheme;
-    }
-
-    return () => {
-      delete root.dataset.kurageTheme;
-    };
-  }, [user?.subscriptionTier]);
+    themeController.setViewer(viewerIdentity);
+  }, [viewerIdentity]);
 
   const fetchCurrentUser = useCallback(async (): Promise<UserWithStats | null> => {
     let token = getAccessToken();

@@ -18,6 +18,8 @@ import { ProfileVisitors } from "./ProfileVisitors";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { hasSubscriptionFeature, type PlayerStats, type UserWithStats } from "@/types/user";
+import { resolveIdentity } from "@/lib/identity";
+import { themeController } from "@/lib/theme";
 
 interface PlayerProfileClientProps {
   user: UserWithStats;
@@ -57,6 +59,15 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
         authUser.role === "ADMIN" ||
         hasSubscriptionFeature(authUser.subscriptionTier, "PROFILE_VISITORS"))
   );
+
+  // The page adopts the identity of the profile being read, not the viewer's
+  // (docs/pt/19 §2.2). Releasing on unmount restores the visitor's own theme,
+  // and it resolves from `initialUser` so a direct URL hit and an anonymous
+  // visitor behave the same as an authenticated navigation.
+  const profileIdentity = resolveIdentity(initialUser);
+  useEffect(() => {
+    return themeController.pushOverride(profileIdentity);
+  }, [profileIdentity]);
 
   useEffect(() => {
     if (isAuthLoading || !authUser || isOwner) return;
