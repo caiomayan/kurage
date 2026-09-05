@@ -77,9 +77,10 @@ class CompetitiveModelTest {
 
         @Test
         void deathmatchIsMeasuredPerMinuteAndNeverDividesByZero() {
-            // Sessão de 10 minutos exatamente nas referências.
+            // Sessão de 10 minutos exatamente nas referências: 1,5 abates e 1,5
+            // mortes por minuto, 170 de dano por minuto, 45% de headshot.
             DeathmatchProduction atReference = new DeathmatchProduction(
-                    600, 16, 13, 1650, 7);
+                    600, 15, 15, 1700, 7);
             assertThat(RatingCalculator.forDeathmatchSession(atReference))
                     .isCloseTo(1.0, org.assertj.core.data.Offset.offset(0.05));
 

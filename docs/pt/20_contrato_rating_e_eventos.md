@@ -2,17 +2,14 @@
 
 [Voltar ao índice](./00_index.md)
 
-**Estado:** aprovado pelo proprietário em 05/09/2026. O modelo competitivo e a
-ingestão de rounds estão **implementados**; o plugin ainda não emite os eventos,
-então nada roda em produção. As referências numéricas continuam pendentes de
-recalibração contra dados reais.
+**Estado:** aprovado pelo proprietário em 05/09/2026 e **implementado de ponta a
+ponta** — modelo, ingestão e emissão pelo plugin. Falta rodar com jogo real.
 **Última atualização:** 05/09/2026.
 
 Este documento fecha os detalhes que o [plano de evolução](./19_plano_evolucao_identidade_rating_perfil.md)
 §11 proíbe a implementação de inventar. Os pesos e referências foram definidos
 pela implementação sob autorização do proprietário e vivem em
-`CompetitiveScales`, versionados: recalibrar é publicar uma versão nova, nunca
-editar valores já calculados.
+`CompetitiveScales`, junto da versão do algoritmo.
 
 ---
 
@@ -58,7 +55,7 @@ incrementa, a calibração jamais completa, e nem ELO nem Rating têm entrada.
 **Implementado dos dois lados.** `POST /plugin/v1/servers/{id}/rounds` recebe,
 valida, guarda o evento cru e fecha unidades; o `Kurage.Core` rastreia o round e
 emite o evento ao final, com fila de reenvio para que uma falha de rede não perca
-o round. O que falta agora é rodar com jogo real e recalibrar as referências.
+o round. O que falta agora é rodar com jogo real.
 
 ## 3. Unidade válida por modo
 
@@ -176,7 +173,7 @@ r_dm = 0.40·(KPM/KPM_ref)
 `DPM` entra invertido porque morrer menos é melhor. O DM não tem objetivo nem
 jogo coletivo: ele mede duelo e mira, e por isso pesa menos no geral.
 
-### 5.3. Referências iniciais
+### 5.3. Referências
 
 Retake é assimétrico — o CT retoma o bombsite e o TR ancora —, então as
 referências são por lado, e o Rating do bloco é a média dos dois **ponderada
@@ -184,45 +181,36 @@ pelos rounds jogados em cada um**.
 
 | Referência | Retake CT | Retake TR | 5v5 | DM |
 |---|---:|---:|---:|---:|
-| `KPR_ref` | 0,95 | 0,75 | 0,68 | — |
-| `ADR_ref` | 105 | 88 | 78 | — |
-| `KAST_ref` | 0,68 | 0,72 | 0,72 | — |
-| `SPR_ref` | 0,34 | 0,50 | 0,32 | — |
-| `MK_ref` | 0,15 | 0,10 | 0,10 | — |
-| `KPM_ref` | — | — | — | 1,60 |
-| `DMG_min_ref` | — | — | — | 165 |
-| `DPM_ref` | — | — | — | 1,30 |
+| `KPR_ref` | 0,55 | 0,75 | 0,679 | — |
+| `ADR_ref` | 70 | 90 | 78 | — |
+| `KAST_ref` | 0,70 | 0,62 | 0,72 | — |
+| `SPR_ref` | 0,44 | 0,25 | 0,317 | — |
+| `MK_ref` | 0,12 | 0,18 | 0,10 | — |
+| `KPM_ref` | — | — | — | 1,50 |
+| `DMG_min_ref` | — | — | — | 170 |
+| `DPM_ref` | — | — | — | 1,50 |
 | `HS_ref` | — | — | — | 0,45 |
 
-> **Estes números foram escolhidos antes de existir um único round do Kurage.**
-> Se os jogadores daqui produzem mais do que a referência supõe, todo mundo
-> aparece acima de 1.00 e o número deixa de significar "médio" — a escala fica
-> deslocada.
+De onde saem: num round os abates de um lado são as mortes do outro, então o KPR
+médio de um lado é o número de mortes adversárias dividido pelo tamanho do
+próprio lado. No retake o lado que ancora é o menor, então por jogador ele mata
+mais e morre mais — daí o TR ter KPR e dano mais altos e sobrevivência bem menor
+que o lado que retoma. No 5v5, KPR e sobrevivência usam as médias que a própria
+HLTV publicou com a Rating 1.0. No deathmatch, abates e mortes de todos se
+igualam, então o jogador de referência tem K/D 1 e os dois valores coincidem.
+
+> **As referências são fixas por design.** Elas definem a escala — o que
+> significa Rating 1.00 — e não medem a população. Ajustá-las ao conjunto de
+> jogadores faria o jogador médio ler 1.00 para sempre por construção, e o número
+> perderia significado: um 1.20 num grupo fraco valeria o mesmo que num grupo
+> forte.
 >
-> Isso não se resolve adivinhando melhor, se resolve medindo, e por isso existe
-> o `ReferenceCalibrationService` da seção 5.4. As referências de 5v5 e DM só
-> podem ser fixadas quando esses modos existirem.
+> É assim que as plataformas de CS operam, e é assim que a própria HLTV trata as
+> suas: valores fixos, trocados apenas numa versão nova e deliberada, como na
+> passagem da 2.0 para a 2.1. Trocar por baixo invalidaria em silêncio todo
+> Rating já calculado.
 
-### 5.4. Medir a referência em vez de estimá-la
-
-`ReferenceCalibrationService` calcula, a partir dos rounds realmente gravados,
-qual seria a referência observada de cada lado, e a compara com a embarcada,
-mostrando o desvio.
-
-- lê **somente rounds já absorvidos por uma unidade fechada**: um bloco em
-  andamento ainda não é amostra completa;
-- abaixo de **2.000 rounds por lado** ele diz "amostra insuficiente" e não
-  publica número — uma média sobre poucos rounds é tão arbitrária quanto o chute
-  que ela pretende substituir;
-- ele **não altera nada**. Publicar novas referências é editar
-  `CompetitiveScales` e subir a versão do algoritmo, uma decisão deliberada:
-  trocar os números por baixo invalidaria silenciosamente todo Rating já
-  calculado.
-
-Com isso, recalibrar deixa de ser uma preocupação em aberto e vira um
-procedimento com evidência: rodar o relatório, ler o desvio, decidir.
-
-### 5.5. Confiabilidade e anti-farming
+### 5.4. Confiabilidade e anti-farming
 
 **Encolhimento para a base**, aplicado por modo antes da agregação:
 
@@ -240,7 +228,7 @@ estratégica que o documento 19 §5 pede.
 **Volume não compra Rating.** É média ponderada, nunca soma: jogar mais aumenta a
 confiabilidade, não o número.
 
-### 5.6. Agregação entre modos
+### 5.5. Agregação entre modos
 
 ```
 conf_m       = n_m / (n_m + 3)
@@ -421,13 +409,9 @@ de auditoria durável, que ainda não existe e é pré-requisito para expô-las.
 
 ## 11. O que ainda falta decidir
 
-1. **Confirmar as referências da seção 5.3** contra dados reais antes da ativação
-   pública. Enquanto não houver dado, são chute informado.
-2. **Referências de 5v5 e DM**, que só podem ser fixadas quando esses modos
-   existirem.
-3. **Temporadas:** o documento 19 §5.1 proíbe decaimento e reset sem nova
+1. **Temporadas:** o documento 19 §5.1 proíbe decaimento e reset sem nova
    decisão.
-4. **Disputa de resultado:** quem contesta, em que prazo, e quem decide.
+2. **Disputa de resultado:** quem contesta, em que prazo, e quem decide.
 
 ## 12. Fontes do levantamento sobre o HLTV Rating
 

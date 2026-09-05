@@ -6,14 +6,21 @@ import com.kurage.api.domain.GameMode;
  * Pesos, referências e constantes do modelo competitivo.
  *
  * <p>Tudo que é número de produto vive aqui, junto da versão do algoritmo, para
- * que recalibrar o modelo seja trocar esta tabela e publicar uma versão nova —
- * nunca editar valores já calculados. O documento 20 §8 exige que toda linha
- * calculada carregue a versão que a produziu.
+ * que mudar o modelo seja trocar esta tabela e publicar uma versão nova — nunca
+ * editar valores já calculados. O documento 20 §8 exige que toda linha calculada
+ * carregue a versão que a produziu.
  *
- * <p><strong>As referências são um ponto de partida, não uma medida.</strong>
- * Elas precisam ser recalibradas sobre dados reais antes da ativação pública, e
- * as de 5v5 e deathmatch só podem ser fixadas quando esses modos existirem. É
- * por isso que elas moram numa constante versionada e não numa migração.
+ * <p><strong>As referências são fixas por design.</strong> Elas definem a escala
+ * — o que significa Rating 1.00 —, e não medem a população. Se fossem ajustadas
+ * ao conjunto de jogadores, o jogador médio leria 1.00 para sempre por
+ * construção, e o número perderia significado ao longo do tempo: um 1.20 num
+ * grupo fraco valeria o mesmo que num grupo forte.
+ *
+ * <p>É assim que as plataformas de CS operam, e é assim que a própria HLTV
+ * trata as suas: valores fixos, trocados apenas numa versão nova e deliberada,
+ * como na passagem da 2.0 para a 2.1. Trocar por baixo invalidaria em silêncio
+ * todo Rating já calculado, e é por isso que estas constantes moram junto da
+ * versão do algoritmo.
  */
 public final class CompetitiveScales {
 
@@ -65,20 +72,38 @@ public final class CompetitiveScales {
     }
 
     /**
-     * Retake é assimétrico: o CT retoma o bombsite sob pressão de tempo e o TR
-     * ancora com a bomba plantada. O mesmo KPR significa coisas diferentes de
-     * cada lado, então cada um tem sua referência.
+     * Retake é assimétrico, e a assimetria não é só de função: é de número.
+     *
+     * <p>O lado que ancora a bomba é o menor e enfrenta gente entrando no site.
+     * Por jogador ele mata mais e morre mais que o lado que retoma, que é mais
+     * numeroso e divide os abates entre mais gente. Por isso o TR tem KPR e dano
+     * mais altos, e sobrevivência bem mais baixa — usar a mesma referência para
+     * os dois puniria quem calha de jogar mais de um lado.
+     *
+     * <p>Como abates e mortes se igualam num round, o KPR médio de um lado é o
+     * número de mortes do outro dividido pelo tamanho do próprio lado. É daí que
+     * estes valores saem, e não de preferência.
      */
-    public static final RoundReferences RETAKE_CT = new RoundReferences(0.95, 105, 0.68, 0.34, 0.15);
-    public static final RoundReferences RETAKE_TR = new RoundReferences(0.75, 88, 0.72, 0.50, 0.10);
+    public static final RoundReferences RETAKE_CT = new RoundReferences(0.55, 70, 0.70, 0.44, 0.12);
+    public static final RoundReferences RETAKE_TR = new RoundReferences(0.75, 90, 0.62, 0.25, 0.18);
 
-    /** 5v5 ainda não existe; estes valores serão fixados com dados do modo. */
-    public static final RoundReferences FIVE_V_FIVE = new RoundReferences(0.68, 78, 0.72, 0.32, 0.10);
+    /**
+     * 5v5. KPR e sobrevivência usam as médias que a HLTV publicou junto da
+     * Rating 1.0 — 0,679 abates e 0,317 de sobrevivência por round —, que são as
+     * referências reais do formato e não uma estimativa nossa.
+     */
+    public static final RoundReferences FIVE_V_FIVE = new RoundReferences(0.679, 78, 0.72, 0.317, 0.10);
 
-    /** Deathmatch, por minuto. Também provisório. */
-    public static final double DM_KPM_REF = 1.60;
-    public static final double DM_DAMAGE_PER_MINUTE_REF = 165;
-    public static final double DM_DPM_REF = 1.30;
+    /**
+     * Deathmatch, por minuto.
+     *
+     * <p>Num deathmatch os abates de todos somam as mortes de todos, então o
+     * jogador de referência tem K/D igual a 1: abates e mortes por minuto são o
+     * mesmo número. O dano segue daí, a cerca de 115 por abate.
+     */
+    public static final double DM_KPM_REF = 1.50;
+    public static final double DM_DAMAGE_PER_MINUTE_REF = 170;
+    public static final double DM_DPM_REF = 1.50;
     public static final double DM_HEADSHOT_REF = 0.45;
 
     /**

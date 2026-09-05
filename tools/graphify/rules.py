@@ -37,7 +37,6 @@ _PLAYTIME = "backend_src_main_java_com_kurage_api_service_playtimeservice_playti
 _RATING = "backend_src_main_java_com_kurage_api_competitive_ratingcalculator_ratingcalculator"
 _ELO = "backend_src_main_java_com_kurage_api_competitive_elocalculator_elocalculator"
 _INGESTION = "backend_src_main_java_com_kurage_api_service_roundingestionservice_roundingestionservice"
-_CALIBRATION = "backend_src_main_java_com_kurage_api_competitive_referencecalibrationservice_referencecalibrationservice"
 
 D05 = "docs/pt/05_game_servers_subsystem.md"
 D07 = "docs/pt/07_frontend_design_system.md"
@@ -197,12 +196,12 @@ CONCEPTS: list[tuple[str, str, str, str]] = [
      "a calibracao. Toda unidade fechada grava a versao do algoritmo que a produziu, junto do evento "
      "cru que a originou. Corrigir uma formula nunca e editar valores calculados: e reprocessar os "
      "eventos sob uma versao nova, preservando as linhas antigas para auditoria e disputa."),
-    (D19, "referencia_medida_nao_estimada", "References Are Measured, Not Guessed",
-     "As referencias que definem o Rating 1.00 foram escolhidas antes de existir um round do Kurage. "
-     "Se os jogadores produzem mais do que elas supoem, todo mundo aparece acima de 1.00 e o numero "
-     "deixa de significar medio. A correcao nao e adivinhar melhor: e medir o observado, exigir "
-     "amostra minima antes de publicar qualquer numero, e tratar a troca das referencias como uma "
-     "versao nova do algoritmo — trocar por baixo invalidaria silenciosamente todo Rating ja "
+    (D19, "referencias_fixas_definem_a_escala", "Fixed References Define the Scale",
+     "As referencias que fazem o Rating valer 1.00 sao fixas por design: elas definem a escala e nao "
+     "medem a populacao. Ajusta-las ao conjunto de jogadores faria o jogador medio ler 1.00 para "
+     "sempre por construcao, e um 1.20 num grupo fraco valeria o mesmo que num grupo forte. E assim "
+     "que as plataformas de CS operam. Trocar uma referencia e publicar uma versao nova do "
+     "algoritmo, nunca editar o valor por baixo, porque isso invalidaria em silencio todo Rating ja "
      "calculado."),
     (D19, "ingestao_idempotente", "Round Ingestion Is Idempotent and All-or-Nothing",
      "Um plugin que perdeu a resposta reenvia o mesmo round; isso e esperado e nao pode contar duas "
@@ -285,9 +284,8 @@ LINKS: list[tuple[str, str, str, str, float]] = [
     ("unidade_valida_e_versionada", _INGESTION, "rationale_for", "INFERRED", 0.95),
     ("unidade_valida_e_versionada", "calibracao_cinco_partidas", "conceptually_related_to", "EXTRACTED", 1.0),
     ("ingestao_idempotente", _INGESTION, "rationale_for", "INFERRED", 0.95),
-    ("referencia_medida_nao_estimada", _CALIBRATION, "rationale_for", "INFERRED", 0.95),
-    ("referencia_medida_nao_estimada", "regra_dados_honestos", "conceptually_related_to", "INFERRED", 0.85),
-    ("referencia_medida_nao_estimada", "unidade_valida_e_versionada", "conceptually_related_to", "INFERRED", 0.85),
+    ("referencias_fixas_definem_a_escala", _RATING, "rationale_for", "INFERRED", 0.95),
+    ("referencias_fixas_definem_a_escala", "unidade_valida_e_versionada", "conceptually_related_to", "INFERRED", 0.85),
     ("ingestao_idempotente", "concorrencia_sem_sucesso_falso", "conceptually_related_to", "INFERRED", 0.85),
     ("ingestao_idempotente", "identidade_fixa_de_servidor", "conceptually_related_to", "INFERRED", 0.85),
     ("motor_de_partida_ausente", _INGESTION, "conceptually_related_to", "INFERRED", 0.75),
