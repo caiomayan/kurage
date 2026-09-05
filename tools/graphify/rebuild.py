@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import collections
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,6 +30,67 @@ from rules import build_semantic_layer  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / "graphify-out"
+
+# graphify is normally installed as an isolated uv/pipx tool, so the `python` on
+# PATH usually cannot import it. Rather than making the caller hunt for the right
+# interpreter, find it and re-exec this script under it.
+_REEXEC_GUARD = "KURAGE_GRAPHIFY_REEXEC"
+
+
+def _graphify_interpreter() -> str | None:
+    """Return a Python that can import graphify, or None."""
+    scripts = "Scripts" if os.name == "nt" else "bin"
+    binary = "python.exe" if os.name == "nt" else "python"
+
+    candidates: list[Path] = []
+    sidecar = OUT / ".graphify_python"
+    if sidecar.is_file():
+        saved = sidecar.read_text(encoding="utf-8").strip().lstrip("﻿")
+        if saved:
+            candidates.append(Path(saved))
+    for tool in ("uv", "pipx"):
+        try:
+            if tool == "uv":
+                root = subprocess.run(["uv", "tool", "dir"], capture_output=True,
+                                      text=True, timeout=30)
+            else:
+                root = subprocess.run(["pipx", "environment", "--value",
+                                       "PIPX_LOCAL_VENVS"], capture_output=True,
+                                      text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if root.returncode == 0 and root.stdout.strip():
+            candidates.append(Path(root.stdout.strip()) / "graphifyy" / scripts / binary)
+
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        probe = subprocess.run([str(candidate), "-c", "import graphify"],
+                               capture_output=True)
+        if probe.returncode == 0:
+            return str(candidate)
+    return None
+
+
+def _ensure_graphify() -> None:
+    try:
+        import graphify  # noqa: F401
+        return
+    except ImportError:
+        pass
+    if os.environ.get(_REEXEC_GUARD):
+        print("ERROR: graphify is not importable. Install it with:\n"
+              '    uv tool install "graphifyy[sql,terraform]"', file=sys.stderr)
+        raise SystemExit(1)
+    interpreter = _graphify_interpreter()
+    if interpreter is None:
+        print("ERROR: graphify is not installed. Install it with:\n"
+              '    uv tool install "graphifyy[sql,terraform]"', file=sys.stderr)
+        raise SystemExit(1)
+    print(f"re-exec under {interpreter}")
+    raise SystemExit(subprocess.run(
+        [interpreter, str(Path(__file__).resolve()), *sys.argv[1:]],
+        env={**os.environ, _REEXEC_GUARD: "1"}).returncode)
 
 # Excluded on purpose:
 #   docs/en          translation of docs/pt; would duplicate every concept node
@@ -112,6 +175,8 @@ def _area_of(source_file: str) -> str | None:
 
 
 def main() -> int:
+    _ensure_graphify()
+
     from graphify.analyze import god_nodes, suggest_questions, surprising_connections
     from graphify.build import build_from_json
     from graphify.cluster import cluster, score_all
