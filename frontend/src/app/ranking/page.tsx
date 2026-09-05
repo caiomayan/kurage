@@ -438,7 +438,7 @@ export default function RankingPage() {
                                 {player.username}
                               </span>
                               <CountryFlag country={player.country} expandOnHover={true} />
-                              {player.kurageLevel > 0 ? (
+                              {player.kurageLevel != null && player.kurageLevel > 0 ? (
                                 <KurageLevelIcon level={player.kurageLevel} className="w-4 h-4 text-[9px]" />
                               ) : null}
                             </div>

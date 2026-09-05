@@ -457,7 +457,7 @@ export default function SettingsPage() {
   }
 
   const userStats = (user as UserWithStats).stats;
-  const kurageLevel = userStats?.kurageLevel ?? 1;
+  const kurageLevel = userStats?.kurageLevel ?? null;
   const faceitLevel = (user as UserWithStats).faceitLevel ?? null;
 
   const navItems = [
@@ -589,7 +589,7 @@ export default function SettingsPage() {
                     </div>
 
                     {/* Subtle Level Node at Bottom Right */}
-                    {kurageLevel > 0 && (
+                    {kurageLevel != null && kurageLevel > 0 && (
                       <div className="absolute -bottom-1 -right-1">
                         <KurageLevelIcon level={kurageLevel} />
                       </div>
@@ -992,7 +992,9 @@ export default function SettingsPage() {
 
                   <div className="flex flex-col">
                     <span className="text-[11px] font-mono uppercase text-mute">Nível Kurage</span>
-                    <span className="text-[14px] font-medium text-[var(--kurage-accent)] mt-1">Nível {kurageLevel}</span>
+                    <span className="text-[14px] font-medium text-[var(--kurage-accent)] mt-1">
+                      {kurageLevel != null ? `Nível ${kurageLevel}` : "Em calibração"}
+                    </span>
                   </div>
                 </div>
 

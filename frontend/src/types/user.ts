@@ -32,8 +32,8 @@ export interface User {
 }
 
 export interface PlayerStats {
-  kurageElo: number;
-  kurageLevel: number;
+  kurageElo: number | null;
+  kurageLevel: number | null;
   hltvRating?: number;
   kastPercentage?: number;
   kills: number;
@@ -47,6 +47,9 @@ export interface PlayerStats {
   winRate?: number;
   totalDamage: number;
   lastMatchAt?: string | null;
+  calibrationMatchesCompleted?: number;
+  calibrationMatchesRequired?: number;
+  isCalibrated?: boolean;
 }
 
 export interface UserWithStats extends User {

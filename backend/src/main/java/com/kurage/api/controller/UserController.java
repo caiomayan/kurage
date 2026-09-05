@@ -32,7 +32,7 @@ public class UserController {
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getMe(@AuthenticationPrincipal User user) {
-        return userService.getUserBySteamId(user.getSteamId64(), user)
+        return userService.getUserBySteamId(user.getSteamId64())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -43,19 +43,15 @@ public class UserController {
     }
 
     @GetMapping("/kurage/{kurageId}")
-    public ResponseEntity<UserResponse> getUserByKurageId(
-            @PathVariable Long kurageId,
-            @AuthenticationPrincipal User currentUser) {
-        return userService.getUserByKurageId(kurageId, currentUser)
+    public ResponseEntity<UserResponse> getUserByKurageId(@PathVariable Long kurageId) {
+        return userService.getUserByKurageId(kurageId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{identifier}")
-    public ResponseEntity<UserResponse> getUserByIdentifier(
-            @PathVariable String identifier,
-            @AuthenticationPrincipal User currentUser) {
-        return userService.getUserByIdentifier(identifier, currentUser)
+    public ResponseEntity<UserResponse> getUserByIdentifier(@PathVariable String identifier) {
+        return userService.getUserByIdentifier(identifier)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -80,6 +76,22 @@ public class UserController {
             @AuthenticationPrincipal User user,
             @RequestParam(value = "limit", defaultValue = "20") int limit) {
         return ResponseEntity.ok(profileVisitService.getRecentVisitors(user, limit));
+    }
+
+    @PostMapping("/kurage/{kurageId}/visit")
+    public ResponseEntity<Void> recordProfileVisit(
+            @PathVariable Long kurageId,
+            @AuthenticationPrincipal User user) {
+        profileVisitService.recordVisitByKurageId(kurageId, user);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/kurage/{kurageId}/visitors")
+    public ResponseEntity<List<ProfileVisitorResponse>> getProfileVisitors(
+            @PathVariable Long kurageId,
+            @AuthenticationPrincipal User user,
+            @RequestParam(value = "limit", defaultValue = "20") int limit) {
+        return ResponseEntity.ok(profileVisitService.getRecentVisitors(user, kurageId, limit));
     }
 
     @PostMapping("/me/avatar")

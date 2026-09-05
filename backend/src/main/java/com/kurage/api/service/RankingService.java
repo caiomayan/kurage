@@ -39,7 +39,6 @@ public class RankingService {
     private final UserRepository userRepository;
     private final RankingSnapshotRepository rankingSnapshotRepository;
     private final TeamRankingSnapshotRepository teamRankingSnapshotRepository;
-    private final PlayerStatsService playerStatsService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -89,7 +88,7 @@ public class RankingService {
             User user = stats.getUser();
             int position = (safePage * safeSize) + i + 1;
 
-            Integer positionDelta = 0;
+            Integer positionDelta = null;
             if (user != null) {
                 Optional<RankingSnapshot> snapshotOpt = rankingSnapshotRepository.findByUserIdAndSnapshotDate(user.getId(), yesterday);
                 if (snapshotOpt.isPresent()) {
@@ -176,7 +175,7 @@ public class RankingService {
             Team team = content.get(i);
             int position = (safePage * safeSize) + i + 1;
 
-            Integer positionDelta = 0;
+            Integer positionDelta = null;
             Optional<TeamRankingSnapshot> snapshotOpt = teamRankingSnapshotRepository.findByTeamIdAndSnapshotDate(team.getId(), yesterday);
             if (snapshotOpt.isPresent()) {
                 positionDelta = snapshotOpt.get().getPosition() - position;
@@ -190,7 +189,7 @@ public class RankingService {
                     team.getTag(),
                     team.getLogoUrl(),
                     team.getCountry(),
-                    team.getTeamElo() != null ? team.getTeamElo() : 200,
+                    team.getTeamElo(),
                     position,
                     positionDelta,
                     memberCount
@@ -251,11 +250,11 @@ public class RankingService {
         User user = userRepository.findByKurageId(kurageId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with Kurage ID: " + kurageId));
 
-        PlayerStats stats = playerStatsService.getOrCreateStats(user);
-        int matchesPlayed = stats.getMatchesPlayed() != null ? stats.getMatchesPlayed() : 0;
-        if (matchesPlayed == 0) {
+        PlayerStats stats = playerStatsRepository.findById(user.getId()).orElse(null);
+        int matchesPlayed = stats != null && stats.getMatchesPlayed() != null ? stats.getMatchesPlayed() : 0;
+        if (matchesPlayed < PlayerStats.CALIBRATION_MATCHES_REQUIRED) {
             PlayerRankingContextResponse unrankedContext = new PlayerRankingContextResponse(
-                    mapToLeaderboardResponse(user, stats, 0, null),
+                    mapToLeaderboardResponse(user, stats, null, null),
                     null,
                     null,
                     null,
@@ -283,11 +282,11 @@ public class RankingService {
 
         Integer deltaYesterday = rankingSnapshotRepository.findByUserIdAndSnapshotDate(user.getId(), yesterday)
                 .map(s -> s.getPosition() - currentPosition)
-                .orElse(0);
+                .orElse(null);
 
         Integer deltaWeek = rankingSnapshotRepository.findByUserIdAndSnapshotDate(user.getId(), weekAgo)
                 .map(s -> s.getPosition() - currentPosition)
-                .orElse(0);
+                .orElse(null);
 
         LeaderboardResponse targetPlayerResponse = mapToLeaderboardResponse(user, stats, currentPosition, deltaYesterday);
 
@@ -304,11 +303,11 @@ public class RankingService {
         for (int i = startIndex; i < endIndex; i++) {
             PlayerStats ps = topList.get(i);
             int pos = i + 1;
-            Integer dY = 0;
+            Integer dY = null;
             if (ps.getUser() != null) {
                 dY = rankingSnapshotRepository.findByUserIdAndSnapshotDate(ps.getUser().getId(), yesterday)
                         .map(s -> s.getPosition() - pos)
-                        .orElse(0);
+                        .orElse(null);
             }
             LeaderboardResponse resp = mapToLeaderboardResponse(ps.getUser(), ps, pos, dY);
             adjacentPlayers.add(resp);
@@ -367,7 +366,11 @@ public class RankingService {
             if (user == null) continue;
 
             int position = i + 1;
-            int elo = ps.getKurageElo() != null ? ps.getKurageElo() : 200;
+            Integer elo = ps.getKurageElo();
+            if (elo == null) {
+                log.warn("Skipping player ranking snapshot with missing ELO: {}", ps.getUserId());
+                continue;
+            }
 
             Optional<RankingSnapshot> existingOpt = rankingSnapshotRepository.findByUserIdAndSnapshotDate(user.getId(), date);
             if (existingOpt.isPresent()) {
@@ -403,7 +406,11 @@ public class RankingService {
         for (int i = 0; i < content.size(); i++) {
             Team team = content.get(i);
             int position = i + 1;
-            int elo = team.getTeamElo() != null ? team.getTeamElo() : 200;
+            Integer elo = team.getTeamElo();
+            if (elo == null) {
+                log.warn("Skipping team ranking snapshot with missing ELO: {}", team.getId());
+                continue;
+            }
 
             Optional<TeamRankingSnapshot> existingOpt = teamRankingSnapshotRepository.findByTeamIdAndSnapshotDate(team.getId(), date);
             if (existingOpt.isPresent()) {
@@ -426,46 +433,49 @@ public class RankingService {
         log.info("Completed daily team ranking snapshots generation: {} snapshots created/updated", savedCount);
     }
 
-    private LeaderboardResponse mapToLeaderboardResponse(User user, PlayerStats stats, int position, Integer positionDelta) {
-        int elo = stats != null && stats.getKurageElo() != null ? stats.getKurageElo() : 200;
-        int level = stats != null ? stats.getKurageLevel() : 3;
+    private LeaderboardResponse mapToLeaderboardResponse(User user, PlayerStats stats, Integer position, Integer positionDelta) {
+        if (user == null) {
+            throw new IllegalStateException("Ranking entry is missing its user");
+        }
+
+        int matches = stats != null && stats.getMatchesPlayed() != null ? stats.getMatchesPlayed() : 0;
+        boolean ranked = stats != null && stats.isCalibrated();
+        Integer elo = ranked ? stats.getKurageElo() : null;
+        Integer level = ranked ? stats.getKurageLevel() : null;
 
         int kills = stats != null && stats.getKills() != null ? stats.getKills() : 0;
         int deaths = stats != null && stats.getDeaths() != null ? stats.getDeaths() : 0;
-        int matches = stats != null && stats.getMatchesPlayed() != null ? stats.getMatchesPlayed() : 0;
         int wins = stats != null && stats.getMatchesWon() != null ? stats.getMatchesWon() : 0;
 
-        BigDecimal kdRatio = deaths > 0
+        BigDecimal kdRatio = !ranked ? null : deaths > 0
                 ? BigDecimal.valueOf((double) kills / deaths).setScale(2, RoundingMode.HALF_UP)
                 : BigDecimal.valueOf(kills).setScale(2, RoundingMode.HALF_UP);
 
-        Integer winRate = matches > 0 ? (wins * 100) / matches : 0;
+        Integer winRate = ranked ? (wins * 100) / matches : null;
 
         String teamTag = null;
-        if (user != null) {
-            List<Team> teams = teamRepository.findAllByMemberUserId(user.getId());
-            if (!teams.isEmpty()) {
-                teamTag = teams.get(0).getTag();
-            }
+        List<Team> teams = teamRepository.findAllByMemberUserId(user.getId());
+        if (!teams.isEmpty()) {
+            teamTag = teams.get(0).getTag();
         }
 
         return new LeaderboardResponse(
-                user != null ? user.getKurageId() : null,
-                user != null ? user.getSteamId64() : "",
-                user != null ? user.getUsername() : "Unknown",
-                user != null ? user.getAvatarUrl() : null,
-                user != null ? user.getCountry() : "BR",
+                user.getKurageId(),
+                user.getSteamId64(),
+                user.getUsername(),
+                user.getAvatarUrl(),
+                user.getCountry(),
                 level,
                 elo,
                 kdRatio,
                 winRate,
-                matches,
-                wins,
+                stats != null ? matches : null,
+                stats != null ? wins : null,
                 position,
                 positionDelta,
-                user != null && user.getPrimaryFunction() != null ? user.getPrimaryFunction().name() : "CORINGA",
+                user.getPrimaryFunction() != null ? user.getPrimaryFunction().name() : null,
                 teamTag,
-                user != null && user.isVerifiedPro()
+                user.isVerifiedPro()
         );
     }
 }

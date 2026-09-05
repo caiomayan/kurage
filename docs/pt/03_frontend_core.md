@@ -119,7 +119,7 @@ A tela inicial e páginas principais no desktop (largura ≥ 1280px) adotam a di
 - **Discovery Grid:** 4 cartões no rodapé direcionando para as verticais da plataforma (Rankings, Jogadores, Times, Servidores).
 
 ### 2. Ranking de Jogadores (`app/ranking/page.tsx`)
-- **Integridade dos dados:** o frontend não cria posição, ELO, rating ou pontos de gráfico. Contas sem partidas aparecem em calibração e não são listadas no ranking; histórico só é desenhado quando há snapshots persistidos.
+- **Integridade dos dados da página:** o ranking não cria posição, ELO, rating ou pontos de gráfico. A classificação exige 5 partidas; contas em calibração não são listadas e o histórico só é desenhado com snapshots persistidos. Hovercard, busca e resumo mostram ausência/calibração em vez de substituir dados por ELO, level, rating ou métricas FACEIT não identificadas.
 - **Pódio Top 3 Expandido (`RankingPodium.tsx`):** Cartões customizados em Ouro (#1), Prata (#2) e Bronze (#3), destacando ELO, K/D, taxa de vitória, insígnia de nível e selo profissional verificado.
 - **Tabela Completa de Classificação:**
   - Posição absoluta com indicador de delta de variação recente (`↑`, `↓`, `—`).
@@ -127,6 +127,11 @@ A tela inicial e páginas principais no desktop (largura ≥ 1280px) adotam a di
   - Insígnias de Nível Kurage (1–10).
   - Métricas competitivas: ELO, K/D, Win Rate %, Vitórias/Partidas e Função Tática primária.
 - **Paginação Persistente:** Suporte a query params na URL (`?page=`, `?size=20`) encapsulados com `<Suspense>`.
+
+### Perfil de jogador — visitantes
+- Ao abrir o perfil de outra conta, o cliente autenticado envia `POST /users/kurage/{kurageId}/visit`; a leitura pública do perfil não grava dados implicitamente.
+- Maré/Admin/Dono veem no perfil-alvo os 20 visitantes recentes por `GET /users/kurage/{kurageId}/visitors`; usuários sem entitlement não recebem o quadro nem os dados.
+- O quadro apresenta avatar e data/hora reais, com carregamento, vazio, falha e nova tentativa. A refatoração visual completa e o novo fundo continuam na etapa 3 do [plano de evolução](./19_plano_evolucao_identidade_rating_perfil.md).
 
 ### 3. Ranking de Times & Organizações (`app/ranking/teams/page.tsx`)
 - Pódio dos Top 3 times com logo/tag, contagem de integrantes e ELO médio da equipe.

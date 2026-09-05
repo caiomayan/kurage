@@ -1,32 +1,21 @@
-import type { User } from "./user";
-
 export type ProfileTab = "overview" | "inventory" | "matches";
-
-export interface ProfileVisitor {
-  visitor: User;
-  visitedAt: string;
-}
 
 export interface ProfileVisitorItem {
   userId: string;
   kurageId: number;
   username: string;
   avatarUrl: string | null;
-  country: string | null;
-  kurageLevel: number;
-  kurageElo: number;
-  isVerifiedPro: boolean;
   visitedAt: string;
 }
 
 export function formatRelativeTime(dateInput: string | Date | number | null | undefined): string {
-  if (!dateInput) return "recentemente";
+  if (dateInput === null || dateInput === undefined || dateInput === "") return "Horário indisponível";
   const date = new Date(dateInput);
   const time = date.getTime();
-  if (Number.isNaN(time)) return "recentemente";
+  if (Number.isNaN(time)) return "Horário indisponível";
 
   const diffMs = Date.now() - time;
-  if (diffMs < 0) return "agora há pouco";
+  if (diffMs < 0) return "Horário indisponível";
 
   const diffSec = Math.floor(diffMs / 1000);
   if (diffSec < 60) return "agora há pouco";

@@ -87,23 +87,26 @@ public class LeaderboardController {
                     int index = dbPage.getContent().indexOf(uf);
                     int position = (page * size) + index + 1;
                     var user = uf.getUser();
+                    if (user == null) {
+                        throw new IllegalStateException("FACEIT ranking entry is missing its Kurage user");
+                    }
                     return new LeaderboardResponse(
-                            user != null ? user.getKurageId() : null,
-                            user != null ? user.getSteamId64() : "",
-                            user != null ? user.getUsername() : "Unknown",
-                            user != null ? user.getAvatarUrl() : null,
-                            user != null ? user.getCountry() : "BR",
-                            uf.getLevel() != null ? uf.getLevel() : 1,
-                            uf.getElo() != null ? uf.getElo() : 0,
+                            user.getKurageId(),
+                            user.getSteamId64(),
+                            user.getUsername(),
+                            user.getAvatarUrl(),
+                            user.getCountry(),
+                            uf.getLevel(),
+                            uf.getElo(),
                             uf.getKdRatio(),
                             uf.getWinRate(),
                             uf.getMatches(),
                             null,
                             position,
-                            0,
-                            user != null && user.getPrimaryFunction() != null ? user.getPrimaryFunction().name() : "CORINGA",
                             null,
-                            user != null && user.isVerifiedPro()
+                            user.getPrimaryFunction() != null ? user.getPrimaryFunction().name() : null,
+                            null,
+                            user.isVerifiedPro()
                     );
                 })
                 .collect(Collectors.toList());

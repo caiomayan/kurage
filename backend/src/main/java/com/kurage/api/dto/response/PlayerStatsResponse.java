@@ -24,7 +24,10 @@ public record PlayerStatsResponse(
         Integer headshotPercentage,
         Long totalDamage,
         BigDecimal adr,
-        Instant lastMatchAt
+        Instant lastMatchAt,
+        int calibrationMatchesCompleted,
+        int calibrationMatchesRequired,
+        boolean isCalibrated
 ) implements Serializable {
 
     public static PlayerStatsResponse create(PlayerStats stats) {
@@ -38,21 +41,22 @@ public record PlayerStatsResponse(
         int matchesWon = stats.getMatchesWon() != null ? stats.getMatchesWon() : 0;
         long totalDamage = stats.getTotalDamage() != null ? stats.getTotalDamage() : 0L;
 
-        BigDecimal kd = deaths > 0
+        boolean calibrated = stats.isCalibrated();
+        BigDecimal kd = matchesPlayed == 0 ? null : deaths > 0
                 ? BigDecimal.valueOf((double) kills / deaths).setScale(2, RoundingMode.HALF_UP)
                 : BigDecimal.valueOf(kills).setScale(2, RoundingMode.HALF_UP);
 
-        int winRate = matchesPlayed > 0 ? (int) Math.round(((double) matchesWon / matchesPlayed) * 100) : 0;
-        int hsPct = kills > 0 ? (int) Math.round(((double) headshots / kills) * 100) : 0;
+        Integer winRate = matchesPlayed > 0 ? (int) Math.round(((double) matchesWon / matchesPlayed) * 100) : null;
+        Integer hsPct = kills > 0 ? (int) Math.round(((double) headshots / kills) * 100) : null;
 
         BigDecimal adr = roundsPlayed > 0
                 ? BigDecimal.valueOf((double) totalDamage / roundsPlayed).setScale(1, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+                : null;
 
         return new PlayerStatsResponse(
                 stats.getUserId(),
-                stats.getKurageElo(),
-                stats.getKurageLevel(),
+                calibrated ? stats.getKurageElo() : null,
+                calibrated ? stats.getKurageLevel() : null,
                 kills,
                 deaths,
                 stats.getAssists(),
@@ -65,7 +69,10 @@ public record PlayerStatsResponse(
                 hsPct,
                 totalDamage,
                 adr,
-                stats.getLastMatchAt()
+                stats.getLastMatchAt(),
+                Math.min(matchesPlayed, PlayerStats.CALIBRATION_MATCHES_REQUIRED),
+                PlayerStats.CALIBRATION_MATCHES_REQUIRED,
+                calibrated
         );
     }
 }

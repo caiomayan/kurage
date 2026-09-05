@@ -63,7 +63,13 @@ function getPersonalizedHeroMessages(user: UserWithStats): string[] {
 
   if (matches > 0) {
     messages.push(`${matches} partidas no Kurage.`);
-    messages.push(`${stats?.kurageElo ?? 200} de ELO no seu registro.`);
+    if (stats?.kurageElo != null) {
+      messages.push(`${stats.kurageElo} de ELO no seu registro.`);
+    } else {
+      const completed = stats?.calibrationMatchesCompleted ?? Math.min(matches, 5);
+      const required = stats?.calibrationMatchesRequired ?? 5;
+      messages.push(`${completed}/${required} partidas de calibração.`);
+    }
 
     if ((stats?.matchesWon ?? 0) > 0) {
       messages.push(`${stats?.matchesWon} vitórias conquistadas.`);

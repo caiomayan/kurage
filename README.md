@@ -12,11 +12,11 @@ transformar o resultado em um passaporte competitivo público e auditável.
 
 ## Estado do projeto
 
-**Candidato a alfa técnica fechada — não pronto para produção pública ou
-cobrança.** Em 29 de agosto de 2026, os gates automatizados passam e a base de
-segurança foi endurecida. Antes de convidar usuários reais ainda é obrigatório
-configurar a infraestrutura externa, executar um restore, preencher/revisar as
-minutas jurídicas e concluir o smoke visual e uma partida Retake real. Motor de
+**Alfa web privada operacional — não pronta para produção pública ou cobrança.**
+Em 31 de agosto de 2026, Vercel/OCI/Cloudflare estavam publicados, frontend e
+health da API responderam HTTP 200 e o operador confirmou sessão, inventário e
+avatar. Antes de convidar público ainda é obrigatório executar restore, concluir
+monitoramento e revisão jurídica, além do smoke com Retake público real. Motor de
 partidas/ELO, DM, 5v5 dinâmico e pagamento permanecem fora deste release.
 
 | Capacidade | Estado verificável |
@@ -29,7 +29,7 @@ partidas/ELO, DM, 5v5 dinâmico e pagamento permanecem fora deste release.
 | Browser e heartbeat de servidor | Funcional com credencial hash individual; sem provisionamento dinâmico ou tenancy |
 | Notificações | PostgreSQL com conteúdo e entrega por destinatário; sem experiência completa no frontend |
 | Assinatura Maré | Plano único, entitlements e identidade coral implementados; sem checkout ou webhook |
-| Produção, observabilidade e disaster recovery | Métricas e runbook implementados; alertas externos e primeiro ensaio de restore pendentes |
+| Deploy web, observabilidade e disaster recovery | Web alfa operacional; métricas/runbook implementados; alertas externos e primeiro ensaio de restore pendentes |
 
 A revisão completa, incluindo evidências por arquivo, riscos e priorização, está em
 [Auditoria do estado atual](./docs/pt/08_auditoria_estado_atual.md). A proposta
@@ -119,6 +119,8 @@ CounterStrikeSharp.
 - Frontend: lint sem erros, 29 testes aprovados e build Next.js de produção concluído.
 - Teste visual no navegador local: indisponível nesta auditoria por falha do runtime
   confiável do navegador; não substituído por uma automação não autorizada.
+- Smoke manual do ambiente web publicado: frontend/health, sessão, inventário e
+  avatar confirmados pelo operador em 31/08/2026; não inclui Retake público.
 
 Os testes ainda não cobrem integrações externas, servidor dedicado CS2, cobrança
 ou o fluxo E2E comercial. Consulte a [estratégia de testes](./docs/pt/11_testes_integracao.md).
@@ -140,11 +142,12 @@ concluída**.
 
 ## Propriedade intelectual e publicação
 
-O repositório canônico deve permanecer **privado**. O portfólio público será um
-case sanitizado com arquitetura, resultados, screenshots próprios e decisões de
-engenharia; recrutadores podem receber acesso temporário ao repositório privado.
-Essa política protege a cadeia de titularidade e os artefatos usados no registro
-do software.
+O repositório canônico está **público** no GitHub e funciona como artefato de
+portfólio do produto. A visibilidade pública não transforma o núcleo em software
+livre nem concede direitos além dos descritos na licença: dados reais, segredos,
+dumps, credenciais, ativos sem cadeia de direitos e detalhes operacionais
+sensíveis não devem entrar no histórico. Commits atribuíveis, tags e releases
+imutáveis preservam evidências úteis de autoria e evolução do software.
 
 O núcleo está sob a [licença proprietária Kurage](./LICENSE). Apenas
 `server/plugins` está sob [MIT](./server/plugins/LICENSE), exigência compatível com
@@ -167,4 +170,5 @@ Kurage é independente e não possui afiliação ou endosso dessas empresas.
 - [Operação e gate de release PT](./docs/pt/15_operacao_e_release.md)
 - [Prontidão jurídica PT](./docs/pt/16_prontidao_juridica.md)
 - [Deploy OCI/Vercel PT](./docs/pt/17_deploy_alpha_oci_vercel.md)
+- [Plano de evolução de identidade, perfil e ranking PT](./docs/pt/19_plano_evolucao_identidade_rating_perfil.md)
 - [Product and market EN](./docs/en/09_product_market.md)

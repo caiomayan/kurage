@@ -1,9 +1,14 @@
 # Deploy da alfa — Vercel, Cloudflare e Oracle Cloud
 
-**Estado:** infraestrutura OCI provisionada e bootstrap confirmado pelo operador;
-primeiro deploy web ainda pendente.
+**Estado:** primeiro deploy somente web concluído; frontend Vercel e backend OCI
+operacionais na topologia de alfa. Servidor CS2 público ainda não existe.
 
-**Última validação documental:** 30/08/2026.
+**Última validação documental/HTTP:** 31/08/2026.
+
+Em 31/08, `https://kurage.caiomayan.com` e
+`https://api.caiomayan.com/actuator/health` responderam HTTP 200. O operador
+também confirmou sessão, inventário e avatar no ambiente publicado. Isso valida
+o deploy web, não o gate de lançamento público ou cobrança.
 
 ## Decisão adotada
 
@@ -59,10 +64,9 @@ novamente o frontend. A disponibilidade dependerá dos heartbeats reais.
 - Segredos não entram em imagem, Terraform, Compose versionado ou artefatos.
 - O token do GHCR é temporário e removido do host após o deploy.
 - O deploy só ocorre depois dos testes com PostgreSQL e Redis reais.
-- Durante a preparação, mantenha a variável de repositório
-  `BACKEND_DEPLOY_ENABLED` ausente ou `false`: testes e publicação continuam, mas
-  o deploy é pulado. Habilite com `true` somente após configurar VM, DNS e segredos.
-  Depois, use **Backend CI/CD → Run workflow → main** para a primeira implantação.
+- O primeiro deploy já foi concluído com `BACKEND_DEPLOY_ENABLED=true`. Em mudanças
+  futuras, preservar a variável somente enquanto a topologia estiver apta; use
+  **Backend CI/CD → Run workflow → main** para redeploy manual controlado.
 - Uma release sem saúde restaura automaticamente a configuração e a imagem
   anteriores.
 

@@ -23,13 +23,13 @@ export interface LeaderboardPlayer {
   username: string;
   avatarUrl: string | null;
   country: string | null;
-  kurageLevel: number;
-  kurageElo: number;
+  kurageLevel: number | null;
+  kurageElo: number | null;
   kdRatio: number | null;
   winRate: number | null;
   matches: number | null;
   wins: number | null;
-  position: number;
+  position: number | null;
   positionDelta: number | null;
   primaryFunction: InGameFunction | string | null;
   teamTag: string | null;

@@ -43,6 +43,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Rotas privadas com autenticação necessária
                 .requestMatchers("/users/me", "/users/me/**", "/inventory/me", "/inventory/me/**", "/api/inventory/me", "/api/cstrike/inventory/me").authenticated()
+                .requestMatchers(HttpMethod.GET, "/users/kurage/*/visitors").authenticated()
+                .requestMatchers(HttpMethod.POST, "/users/kurage/*/visit").authenticated()
                 .requestMatchers(HttpMethod.PUT, "/inventory/me", "/api/inventory/me", "/api/cstrike/inventory/me").authenticated()
                 .requestMatchers(HttpMethod.GET, "/teams/*/invites", "/teams/*/join-requests", "/teams/join-requests/me", "/teams/*/invite-links").authenticated()
 

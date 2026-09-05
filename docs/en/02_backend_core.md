@@ -1,8 +1,8 @@
 # Backend Core (Spring Boot 4 / Java 21)
 
-> **Status note (20 August 2026):** verify capabilities and risks in the
-> [factual audit](./08_current_state_audit.md). Match/ELO, billing, entitlements,
-> and server provisioning are not implemented.
+> **Status note (31 August 2026):** verify capabilities and risks in the
+> [factual audit](./08_current_state_audit.md). Maré entitlements exist; the
+> match/ELO engine, billing, and dynamic server provisioning do not.
 
 [← Return to Master Node](./00_index.md)
 
@@ -45,7 +45,7 @@ com.kurage.api
 | `TeamJoinRequest` | `team_join_requests` | Player applications to join a team (`desired_role`, `status`, `reviewed_by`). |
 | `TeamInviteLink` | `team_invite_links` | Tokenized shareable invite links with expiry and usage limits. |
 | `GameServer` | `game_servers` | Official Kurage CS2 game servers (Retakes, DM, 5v5 Scrim). |
-| `ProfileVisit` | `profile_visits` | Profile visitor tracker (exclusive Maré subscriber feature). |
+| `ProfileVisit` | `profile_visits` | Explicit authenticated visit records; reading a profile's latest 20 visitors requires Maré/Admin/Owner. |
 | `UserFaceit` | `users_faceit` | Faceit profile integration and match history snapshots. |
 | `UserInventory` | `user_inventories` | CS2 skin inventory cached as JSONB. |
 | `User` (private contact) | `users.email`, `users.phone_e164` | Optional channels available exclusively to the account owner; prepared for future verification and delivery. |
@@ -165,14 +165,16 @@ The Kurage search system provides real-time resolution with database relevance w
 
 ### 1. `UserService` & `UserController`
 - **Kurage ID Generation:** `generateKurageId()` generates unique sequential numeric IDs with variable gaps between 7 and 19.
-- **Automated Registration:** On Steam login (`getOrCreateUser`), the player is assigned a unique Kurage ID, `role = USER`, `subscriptionTier = FREE`, `isVerifiedPro = false`, and initial CS2 stats with ELO 200 (Level 3).
+- **Automated Registration:** On Steam login (`getOrCreateUser`), the player receives a unique Kurage ID, `role = USER`, `subscriptionTier = FREE`, and `isVerifiedPro = false`. Internal provisional stats are not published as ELO/Level before five calibration matches.
 - **Profile Caching:** 5-minute Redis cache keyed by SteamId64 and KurageId (`cache:profile:steam:{id}`, `cache:profile:kurage:{id}`).
 - **Endpoints:**
   - `GET /users/me`: Authenticated player's full profile.
-  - `GET /users/kurage/{kurageId}`: Public profile by Kurage ID (records visit if authenticated).
-  - `GET /users/{steamId64}`: Public profile by Steam ID 64 (records visit if authenticated).
+  - `GET /users/kurage/{kurageId}`: Public profile by Kurage ID, with no write side effect.
+  - `GET /users/{steamId64}`: Public profile by Steam ID 64, with no write side effect.
   - `GET /users/{kurageId}/hovercard`: Lightweight hovercard metrics (K/D, Level, ELO, team, tier) with 5-minute cache.
-  - `GET /users/me/visitors`: List of recent profile visitors (exclusive to `MARE` subscribers).
+  - `POST /users/kurage/{kurageId}/visit`: Explicitly records an authenticated visit; self-visits are ignored and each pair is deduplicated for one hour.
+  - `GET /users/kurage/{kurageId}/visitors`: Returns up to 20 recent visitors for the target profile; requires `PROFILE_VISITORS`, granted to Maré/Admin/Owner.
+  - `GET /users/me/visitors`: Compatibility shortcut for the caller's own profile under the same authorization.
   - `GET /users/search?q={query}`: Fast search by username, SteamId, or Kurage ID.
   - `POST /users/me/avatar`: Avatar upload to Cloudflare R2 (S3).
   - `PUT /users/me/username`: Update username.
@@ -188,8 +190,8 @@ The Kurage search system provides real-time resolution with database relevance w
 - `PermissionService` grants unrestricted access to `ADMIN` and `OWNER`, and validates features for regular players via `SubscriptionService.hasFeature(user, feature)`.
 
 ### 3. `ProfileVisitService`
-- `recordVisit(visitedUser, visitorUser)`: Asynchronous profile visit recording with Redis temporal rate-limiting (max 1 visit per pair per 1 hour). Self-visits are ignored.
-- `getRecentVisitors(user, limit)`: Returns recent visitors with level, ELO, avatar, and timestamp.
+- `recordVisitByKurageId(visitedKurageId, visitorUser)`: persists within the endpoint transaction, using Redis debounce and a PostgreSQL check when Redis is unavailable. Self-visits are ignored.
+- `getRecentVisitors(viewer, visitedKurageId, limit)`: authorizes the viewer and returns only ID, Kurage ID, name, avatar, and the real timestamp for the latest 20 records.
 
 ### 4. `PlayerStatsService`
 - Initialization of competitive metrics with ELO 200.

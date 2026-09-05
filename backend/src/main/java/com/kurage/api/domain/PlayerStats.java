@@ -18,6 +18,8 @@ import java.util.UUID;
 @Builder
 public class PlayerStats extends Auditable implements Persistable<UUID> {
 
+    public static final int CALIBRATION_MATCHES_REQUIRED = 5;
+
     @Id
     @Column(name = "user_id")
     private UUID userId;
@@ -69,6 +71,10 @@ public class PlayerStats extends Auditable implements Persistable<UUID> {
         if (kurageElo == null || kurageElo < 0) return 1;
         if (kurageElo >= 900) return 10;
         return (kurageElo / 100) + 1;
+    }
+
+    public boolean isCalibrated() {
+        return matchesPlayed != null && matchesPlayed >= CALIBRATION_MATCHES_REQUIRED;
     }
 
     @Override

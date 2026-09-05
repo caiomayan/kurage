@@ -6,7 +6,7 @@ import { RankingHistoryPoint } from "@/types/ranking";
 
 interface PerformanceLineChartProps {
   history: RankingHistoryPoint[];
-  currentElo: number;
+  currentElo: number | null;
 }
 
 export function PerformanceLineChart({ history, currentElo }: PerformanceLineChartProps) {
@@ -34,8 +34,9 @@ export function PerformanceLineChart({ history, currentElo }: PerformanceLineCha
 
   // Calculate min/max for Y axis slightly padded
   const elos = data.map(d => d.elo);
-  const minElo = Math.min(...elos, currentElo);
-  const maxElo = Math.max(...elos, currentElo);
+  const domainElos = currentElo === null ? elos : [...elos, currentElo];
+  const minElo = Math.min(...domainElos);
+  const maxElo = Math.max(...domainElos);
   const yDomain = [Math.max(0, minElo - 50), maxElo + 50];
 
   return (

@@ -306,18 +306,18 @@ Esta documentação de produto não é aconselhamento jurídico.
 
 ### Estratégia única de publicação
 
-1. manter o monorepo canônico privado;
-2. criar releases assinadas e arquivos imutáveis;
-3. publicar um case sanitizado separado com screenshots próprios, diagrama,
-   métricas e decisões;
-4. conceder acesso temporário, nominal e revogável a recrutadores;
-5. nunca publicar `.env`, dumps, provider IDs, algoritmo antifraude ou ativos sem
-   cadeia de direitos.
+1. manter o monorepo canônico público como portfólio técnico do Kurage;
+2. criar tags, releases e arquivos imutáveis atribuíveis ao autor;
+3. usar somente screenshots próprios e dados sintéticos em demos públicas;
+4. manter o núcleo sob a licença proprietária do repositório e deixar explícito
+   que visibilidade não equivale a licença open source;
+5. nunca publicar `.env`, dumps, provider IDs, credenciais, lógica antifraude
+   sensível ou ativos sem cadeia de direitos.
 
-O motivo é prático e jurídico: sem licença pública, copyright fica reservado, mas
-um repositório público no GitHub ainda pode ser visualizado e bifurcado pela
-funcionalidade da plataforma. O repositório privado mantém melhor controle sobre
-segredo, cadeia de titularidade e avaliação. Consulte a
+O motivo é prático: o código público permite avaliação direta do portfólio, mas
+também pode ser visualizado e bifurcado pela funcionalidade do GitHub. A licença
+define os usos permitidos; higiene de segredos, procedência dos ativos e histórico
+atribuível protegem a operação e reforçam evidências de autoria. Consulte a
 [orientação de licenças do GitHub](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository)
 e os [Termos do GitHub](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service).
 
@@ -372,7 +372,7 @@ Uma fase só termina com o critério de saída da auditoria, não por calendári
 | Dependência de Valve/FACEIT/host | adapters, cache, degradação clara e termos revisados |
 | Abuso/smurf/fraude | 18+, server authority, limites, revisão e trilha de auditoria |
 | Marca/ativos de terceiros | busca INPI e asset register antes de publicação |
-| Vazamento do diferencial | repositório privado e case sanitizado |
+| Exposição indevida no repositório público | licença proprietária, revisão de segredos e ativos com procedência |
 | Complexidade prematura | monólito modular, um país, uma moeda, um provider por domínio |
 
 ## 15. Como apresentar no portfólio
@@ -384,14 +384,15 @@ O case público deve contar uma história verificável:
 3. arquitetura como construída e arquitetura-alvo;
 4. decisões difíceis: sessão, ELO idempotente, control plane e billing;
 5. screenshots próprios, demo sem dados reais e diagrama;
-6. testes executados com números exatos, inclusive lint ainda pendente;
+6. testes, lint, build e scans com resultados exatos do commit demonstrado, sem
+   reaproveitar contagens históricas;
 7. incidentes/riscos descobertos e como foram priorizados;
 8. resultado de design partners quando existir;
-9. link para documentação bilíngue e acesso privado sob solicitação.
+9. link para a documentação bilíngue e para o repositório público.
 
-Para vagas, honestidade aumenta o valor técnico: “alfa com 137 testes e build
-frontend aprovado, ainda bloqueada por P0” é mais profissional que alegar produção
-sem domínio operacional.
+Para vagas, honestidade aumenta o valor técnico: “alfa web privada operacional,
+com domínio e CI/CD, mas ainda sem servidor CS2 público, billing e restore
+validado” é mais profissional que apresentar o sistema como SaaS já lançado.
 
 ## 16. Critério de sucesso
 

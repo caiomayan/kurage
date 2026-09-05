@@ -1,7 +1,7 @@
 # Operations, recovery, and release gate
 
-**Status:** base infrastructure implemented; external procedures still require
-execution. **Last validated:** 29 Aug 2026.
+**Status:** private-alpha web infrastructure is operational; public-release
+procedures still require execution. **Last validated:** 31 Aug 2026.
 
 ## Launch decision
 
@@ -65,7 +65,7 @@ record cause and corrective action.
 
 ## Closed-alpha gate
 
-- [ ] owner configures domain, DNS/TLS, and infrastructure accounts;
+- [x] owner configured domains, DNS/TLS, and web infrastructure accounts (31 Aug 2026);
 - [ ] unique secrets are generated and old values rotated;
 - [ ] an isolated restore completes within RPO/RTO;
 - [ ] controller identity and privacy channel are filled and drafts reviewed;
@@ -78,4 +78,3 @@ Paid production additionally requires Mercado Pago sandbox/production,
 idempotent webhooks, reconciliation, entitlements, cancellation, refunds,
 receipts, support, consumer protections, and end-to-end tests. Maré's visual
 presentation does not satisfy this gate.
-

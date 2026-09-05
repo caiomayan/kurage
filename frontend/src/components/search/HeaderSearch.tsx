@@ -360,9 +360,11 @@ export function HeaderSearch({
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] font-sans text-mute">
-                                  <span className="flex items-center gap-1 text-[var(--kurage-accent)] font-mono font-bold">
-                                    <Logo size={11} className="text-[var(--kurage-accent)]" /> {topResult.player.kurageElo} ELO
-                                  </span>
+                                  {topResult.player.kurageElo != null && (
+                                    <span className="flex items-center gap-1 text-[var(--kurage-accent)] font-mono font-bold">
+                                      <Logo size={11} className="text-[var(--kurage-accent)]" /> {topResult.player.kurageElo} ELO
+                                    </span>
+                                  )}
                                   {topResult.player.faceitElo != null && (
                                     <span className="flex items-center gap-1 text-stone-300 font-mono">
                                       <SiFaceit className="text-[#ff5500] text-[11px]" /> {topResult.player.faceitElo}
@@ -384,7 +386,9 @@ export function HeaderSearch({
                             </div>
 
                             <div className="flex items-center gap-3 relative z-10">
-                              <KurageLevelIcon level={topResult.player.kurageLevel} className="w-6 h-6" />
+                              {topResult.player.kurageLevel != null && (
+                                <KurageLevelIcon level={topResult.player.kurageLevel} className="w-6 h-6" />
+                              )}
                               <PiArrowRight className="w-4 h-4 text-mute/50 group-hover:text-white group-hover:translate-x-1 transition-transform duration-200" />
                             </div>
                           </div>
@@ -493,10 +497,16 @@ export function HeaderSearch({
                                 </div>
 
                                 <div className="flex items-center gap-3">
-                                  <span className="font-mono text-[12px] font-semibold text-[var(--kurage-accent)] leading-none">
-                                    {player.kurageElo} ELO
-                                  </span>
-                                  <KurageLevelIcon level={player.kurageLevel} className="w-4 h-4" />
+                                  {player.kurageElo != null ? (
+                                    <span className="font-mono text-[12px] font-semibold text-[var(--kurage-accent)] leading-none">
+                                      {player.kurageElo} ELO
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-mute">Em calibração</span>
+                                  )}
+                                  {player.kurageLevel != null && (
+                                    <KurageLevelIcon level={player.kurageLevel} className="w-4 h-4" />
+                                  )}
                                 </div>
                               </div>
                             );

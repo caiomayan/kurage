@@ -30,7 +30,7 @@ interface PlayerRankingSnapshotProps {
   };
   previousPlayer?: SnapshotPlayerRow | null;
   nextPlayer?: SnapshotPlayerRow | null;
-  rankDelta?: number;
+  rankDelta?: number | null;
 }
 
 function PositionDelta({ delta }: { delta?: number | null }) {
@@ -61,7 +61,7 @@ export function PlayerRankingSnapshot({
   player,
   previousPlayer = null,
   nextPlayer = null,
-  rankDelta = 0,
+  rankDelta = null,
 }: PlayerRankingSnapshotProps) {
   const [isHovered, setIsHovered] = useState(false);
 

@@ -115,7 +115,7 @@ On desktop (width ≥ 1280px), pages utilize a functional 3-column split:
 - **Discovery Grid:** 4 footer callouts directing users to platform verticals (Rankings, Players, Teams, Servers).
 
 ### 2. Player Leaderboard (`app/ranking/page.tsx`)
-- **Data integrity:** the frontend does not manufacture position, ELO, rating, or chart points. Zero-match accounts render as calibrating and are absent from the leaderboard; history is drawn only from persisted snapshots.
+- **Page data integrity:** the leaderboard does not manufacture position, ELO, rating, or chart points. Ranking requires five matches; calibrating accounts are absent and history is drawn only from persisted snapshots. Hovercards, search, and summaries expose missing/calibrating states instead of substituting ELO, level, rating, or unlabeled FACEIT metrics.
 - **Top 3 Podium (`RankingPodium.tsx`):** Expanded cards in Gold (#1), Silver (#2), and Bronze (#3), showcasing ELO, K/D, win rate, level badge, and verified pro status.
 - **Complete Leaderboard Table:**
   - Absolute position with recent position delta indicators (`↑`, `↓`, `—`).
@@ -123,6 +123,11 @@ On desktop (width ≥ 1280px), pages utilize a functional 3-column split:
   - Kurage Level Badges (1–10).
   - Competitive metrics: ELO, K/D, Win Rate %, Wins/Matches, and tactical role tag.
 - **Persistent Pagination:** URL search parameters (`?page=`, `?size=20`) wrapped in `<Suspense>`.
+
+### Player profile — visitors
+- When another account's profile opens, the authenticated client sends `POST /users/kurage/{kurageId}/visit`; public profile reads do not write implicitly.
+- Maré/Admin/Owner can view the target profile's latest 20 visitors through `GET /users/kurage/{kurageId}/visitors`; callers without the entitlement receive neither the panel nor its data.
+- The panel renders real avatar and timestamp data with loading, empty, failure, and retry states. The full visual refactor and new background remain in step 3 of the [evolution plan](../pt/19_plano_evolucao_identidade_rating_perfil.md).
 
 ### 3. Team & Organization Leaderboard (`app/ranking/teams/page.tsx`)
 - Top 3 teams podium with logo/tag, member count, and team average ELO.

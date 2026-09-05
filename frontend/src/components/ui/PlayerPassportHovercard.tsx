@@ -180,8 +180,8 @@ export function PlayerPassportHovercard({
 
   // Consolidated real data resolution
   const resolvedKurageId = numericKurageId || remoteData?.kurageId || initialData?.kurageId || null;
-  const matchesPlayed = remoteData?.matchesPlayed ?? initialData?.stats?.matchesPlayed ?? initialData?.matches ?? 0;
-  const isUncalibrated = matchesPlayed === 0;
+  const matchesPlayed = remoteData?.matchesPlayed ?? initialData?.stats?.matchesPlayed ?? initialData?.matches ?? null;
+  const hasMatches = matchesPlayed !== null && matchesPlayed > 0;
 
   const resolvedUsername = remoteData?.username || initialData?.username || username;
   const resolvedAvatar = remoteData?.avatarUrl !== undefined ? remoteData.avatarUrl : (initialData?.avatarUrl !== undefined ? initialData.avatarUrl : avatarUrl);
@@ -196,7 +196,7 @@ export function PlayerPassportHovercard({
 
   // Real statistics formatting without mock defaults
   let displayRating = "-";
-  if (!isUncalibrated) {
+  if (hasMatches) {
     const rawRating = remoteData?.hltvRating ?? initialData?.stats?.hltvRating;
     if (rawRating !== null && rawRating !== undefined && rawRating > 0) {
       displayRating = Number(rawRating).toFixed(2);
@@ -204,7 +204,7 @@ export function PlayerPassportHovercard({
   }
 
   let displayKd = "-";
-  if (!isUncalibrated) {
+  if (hasMatches) {
     const rawKd = remoteData?.kdRatio ?? initialData?.stats?.kdRatio;
     if (rawKd !== null && rawKd !== undefined) {
       displayKd = Number(rawKd).toFixed(2);
@@ -216,11 +216,11 @@ export function PlayerPassportHovercard({
   }
 
   let displayWinRate = "-";
-  if (!isUncalibrated) {
+  if (hasMatches) {
     const rawWr = remoteData?.winRate ?? initialData?.stats?.winRate;
     if (rawWr !== null && rawWr !== undefined) {
       displayWinRate = `${rawWr}%`;
-    } else if (initialData?.stats && matchesPlayed > 0) {
+    } else if (initialData?.stats && matchesPlayed !== null && matchesPlayed > 0) {
       displayWinRate = `${Math.round(((initialData.stats.matchesWon ?? 0) / matchesPlayed) * 100)}%`;
     }
   }
@@ -368,7 +368,7 @@ export function PlayerPassportHovercard({
               <div className="flex flex-col">
                 <span className="text-[8px] font-sans font-semibold uppercase tracking-wider text-mute">ELO</span>
                 <span className="font-display text-[15px] font-bold text-[var(--kurage-accent)] leading-tight mt-0.5">
-                  {!isUncalibrated && resolvedElo !== null ? resolvedElo : "—"}
+                  {resolvedElo !== null ? resolvedElo : "—"}
                 </span>
               </div>
 

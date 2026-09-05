@@ -1,7 +1,7 @@
 # Operação, recuperação e gate de release
 
-**Estado:** implementado na infraestrutura-base; procedimentos externos ainda
-precisam ser executados. **Última validação:** 29/08/2026.
+**Estado:** infraestrutura web da alfa privada operacional; procedimentos de
+release público ainda precisam ser executados. **Última validação:** 31/08/2026.
 
 ## Decisão de lançamento
 
@@ -77,7 +77,7 @@ comunicar quando aplicável e registrar causa/ação sem culpabilização.
 
 ## Gate da alfa fechada
 
-- [ ] domínio, DNS/TLS e contas de infraestrutura configurados pelo proprietário;
+- [x] domínio, DNS/TLS e contas da infraestrutura web configurados pelo proprietário (31/08/2026);
 - [ ] segredos exclusivos gerados e quaisquer valores antigos rotacionados;
 - [ ] primeiro restore isolado executado dentro do RPO/RTO;
 - [ ] controlador e canal de privacidade preenchidos; minutas revisadas;
@@ -92,4 +92,3 @@ Além dos itens anteriores: Mercado Pago sandbox e produção, webhook idempoten
 reconciliação, entitlement, cancelamento, reembolso, nota/recibo, suporte,
 proteção ao consumidor e testes E2E precisam estar concluídos. A presença visual
 de Maré não satisfaz esse gate.
-

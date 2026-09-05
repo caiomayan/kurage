@@ -3,7 +3,7 @@
 [English version](../en/12_mare_membership.md)
 
 **Estado:** contrato de produto e entitlements implementados; cobrança planejada.  
-**Última validação:** 26/08/2026.
+**Última validação:** 31/08/2026.
 
 ## Proposta
 
@@ -31,6 +31,12 @@ plataforma. Não é um plano de Retake e não concede vantagem competitiva.
 3. prioridade global: prioridade em filas de servidores oficiais, sem expulsar
    jogadores ativos;
 4. acesso antecipado a novos modos e experiências.
+
+O rastreamento de visitas já existe no PostgreSQL e a API atual permite a um
+Maré/Admin/Dono consultar até 20 visitantes do **próprio** perfil. O quadro visual
+e a consulta autorizada dos visitantes de outro perfil ainda estão planejados no
+[plano de evolução](./19_plano_evolucao_identidade_rating_perfil.md); usuários
+sem entitlement nunca devem receber identidades ou horários dessa lista.
 
 Maré nunca altera dano, economia, equipamentos, matchmaking por habilidade ou o
 resultado de uma partida. Benefícios futuros precisam respeitar essa regra.

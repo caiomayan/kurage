@@ -12,12 +12,12 @@ the result into a public, auditable competitive passport.
 
 ## Project status
 
-**Closed technical-alpha candidate — not ready for public or paid production.**
-As of 29 August 2026, automated gates pass and the security baseline is hardened.
-Before real users are invited, external infrastructure must be configured, a
-restore drill performed, legal drafts completed/reviewed, and visual plus real
-Retake smoke tests completed. Match/ELO, DM, dynamic 5v5, and billing remain
-outside this release.
+**Private web alpha operational — not ready for public or paid production.** As
+of 31 August 2026, Vercel/OCI/Cloudflare were deployed, the frontend and API
+health returned HTTP 200, and the operator confirmed sessions, inventory, and
+avatar. Before public invitations, restore, monitoring, legal review, and a real
+public-Retake smoke test remain required. Match/ELO, DM, dynamic 5v5, and billing
+remain outside this release.
 
 | Capability | Verified status |
 |---|---|
@@ -29,7 +29,7 @@ outside this release.
 | Server browser and heartbeat | Working with hashed per-server credentials; no dynamic provisioning or tenancy |
 | Notifications | PostgreSQL content plus per-recipient delivery; complete frontend experience missing |
 | Maré membership | Single plan, entitlements, and coral identity implemented; no checkout or webhook |
-| Production, observability and disaster recovery | Metrics and runbook implemented; external alerts and first restore drill pending |
+| Web deployment, observability and disaster recovery | Web alpha operational; metrics/runbook implemented; external alerts and first restore drill pending |
 
 See the evidence-based [current-state audit](./docs/en/08_current_state_audit.md),
 the [product and go-to-market plan](./docs/en/09_product_market.md), and the
@@ -118,6 +118,8 @@ CounterStrikeSharp host.
 - Frontend: zero lint issues, 29 passing tests, and a successful production build.
 - Local visual browser test: unavailable due to a trusted browser-runtime setup
   failure; it was not replaced with an unauthorized automation path.
+- Manual deployed-web smoke: frontend/health, session, inventory, and avatar were
+  confirmed by the operator on 31 August 2026; this does not include public Retake.
 
 The current tests do not yet cover external providers, a dedicated CS2 server,
 billing, or the commercial end-to-end flow. See the
@@ -139,11 +141,12 @@ aged 18 or over, in Brazil and then Latin America. The north-star metric is
 
 ## Intellectual property and publication
 
-The canonical repository must remain **private**. The public portfolio artifact
-will be a sanitized case study containing architecture, outcomes, original
-screenshots and engineering decisions; recruiters may receive time-limited access
-to the private repository. This protects chain-of-title and software-registration
-evidence.
+The canonical repository is **public** on GitHub and serves as a product portfolio
+artifact. Public visibility does not make the core open source or grant rights
+beyond the license: real user data, secrets, dumps, credentials, assets without a
+clear chain of title, and sensitive operational details must never enter its
+history. Attributable commits, tags, and immutable releases preserve useful
+evidence of authorship and software evolution.
 
 The core is governed by the [Kurage proprietary license](./LICENSE). Only
 `server/plugins` is [MIT-licensed](./server/plugins/LICENSE), as required by the
@@ -165,3 +168,4 @@ Kurage is independent and is not affiliated with or endorsed by them.
 - [PostgreSQL notifications EN](./docs/en/10_postgres_notifications.md)
 - [Integration testing EN](./docs/en/11_integration_testing.md)
 - [OCI/Vercel deployment EN](./docs/en/17_oci_vercel_alpha_deployment.md)
+- [Identity, profile, and ranking evolution plan PT](./docs/pt/19_plano_evolucao_identidade_rating_perfil.md)

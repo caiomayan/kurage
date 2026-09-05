@@ -1,7 +1,13 @@
 # Kurage deployment terrain
 
-Last updated: 2026-08-30. Status: **OCI infrastructure provisioned and bootstrap
-confirmed by the operator; first web deployment still pending**.
+Last updated: 2026-08-31. Status: **first web-only deployment complete; Vercel
+frontend and OCI backend are operational; public CS2 server remains pending**.
+
+The public frontend and API health returned HTTP 200 on 31 August. The operator
+also confirmed the session, inventory, and avatar flows. The one-time sections
+below are retained as rebuild/migration runbooks; completed steps are not current
+pending tasks. Backup/restore, external monitoring, legal review, and public
+Retake remain release gates.
 
 This directory prepares the alpha topology chosen for Kurage:
 

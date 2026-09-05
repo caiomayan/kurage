@@ -15,14 +15,14 @@ interface PlayerProfileHeaderProps {
   user: UserWithStats;
   faceitLevel?: number | null;
   currentRank?: number | null;
-  rankDelta?: number;
+  rankDelta?: number | null;
 }
 
 export function PlayerProfileHeader({
   user,
   faceitLevel = null,
   currentRank = null,
-  rankDelta = 0,
+  rankDelta = null,
 }: PlayerProfileHeaderProps) {
   const kurageLevel = user.stats?.kurageLevel ?? 0;
 
@@ -40,7 +40,7 @@ export function PlayerProfileHeader({
               username: user.username,
               avatarUrl: user.avatarUrl,
               country: user.country,
-              kurageElo: user.stats?.kurageElo,
+              kurageElo: user.stats?.kurageElo ?? undefined,
               isVerifiedPro: user.isVerifiedPro,
             }}
             rankDelta={rankDelta}
@@ -130,7 +130,7 @@ export function PlayerProfileHeader({
             username: user.username,
             avatarUrl: user.avatarUrl,
             country: user.country,
-            kurageElo: user.stats?.kurageElo,
+            kurageElo: user.stats?.kurageElo ?? undefined,
             isVerifiedPro: user.isVerifiedPro,
           }}
           rankDelta={rankDelta}

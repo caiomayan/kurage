@@ -44,8 +44,8 @@ export function DashboardSummary() {
   if (!user) return null;
 
   const playerStats = rankingData?.player;
-  const history = rankingData?.history || [];
-  const deltaYesterday = rankingData?.deltaYesterday || 0;
+  const history = rankingData?.history ?? [];
+  const deltaYesterday = rankingData?.deltaYesterday ?? null;
   
   // Condicional de dados do Kurage
   const hasKurageData = (playerStats?.matches || 0) > 0;
@@ -54,14 +54,13 @@ export function DashboardSummary() {
   const displayElo = hasKurageData ? playerStats?.kurageElo : faceitData?.elo;
   const displayWinRate = hasKurageData ? playerStats?.winRate : faceitData?.winRate;
   const displayKd = hasKurageData ? playerStats?.kdRatio?.toFixed(2) : faceitData?.kdRatio?.toFixed(2);
-  const displayLevel = hasKurageData ? (
-    <KurageLevelIcon level={playerStats?.kurageLevel || 1} className="w-5 h-5" />
-  ) : (
-    <FaceitLevelIcon level={faceitData?.level || 1} className="w-5 h-5" />
-  );
-  const displayWinRateDonutSource = hasKurageData 
-    ? { wins: playerStats?.wins || 0, matches: playerStats?.matches || 0 } 
-    : { wins: faceitData?.winRate ? Math.round((faceitData.winRate / 100) * 100) : 0, matches: faceitData?.winRate ? 100 : 0 };
+  const displayLevel = hasKurageData && playerStats?.kurageLevel != null
+    ? <KurageLevelIcon level={playerStats.kurageLevel} className="w-5 h-5" />
+    : !hasKurageData && faceitData?.level != null
+      ? <FaceitLevelIcon level={faceitData.level} className="w-5 h-5" />
+      : null;
+  const kurageWins = playerStats?.wins ?? null;
+  const kurageMatches = playerStats?.matches ?? null;
 
   return (
     <div className="relative z-10 w-full bg-canvas shadow-[0_-20px_40px_rgba(0,0,0,0.5)]">
@@ -118,9 +117,9 @@ export function DashboardSummary() {
                 </span>
                 <div className="flex items-baseline gap-4">
                   <span className="font-display text-[48px] text-ink leading-none">
-                    {displayElo || "---"}
+                    {displayElo ?? "—"}
                   </span>
-                  {hasKurageData && deltaYesterday !== 0 && (
+                  {hasKurageData && deltaYesterday !== null && deltaYesterday !== 0 && (
                     <span className={`text-[14px] font-sans font-semibold rounded-full px-2 py-0.5 ${deltaYesterday > 0 ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`}>
                       {deltaYesterday > 0 ? "+" : ""}{deltaYesterday} pts
                     </span>
@@ -131,11 +130,13 @@ export function DashboardSummary() {
               <div className="flex gap-12 mr-8">
                 <div className="flex flex-col">
                   <span className="text-[12px] text-mute uppercase tracking-widest mb-1">Win Rate</span>
-                  <span className="font-sans font-semibold text-[24px] text-ink">{displayWinRate || 0}%</span>
+                  <span className="font-sans font-semibold text-[24px] text-ink">
+                    {displayWinRate != null ? `${displayWinRate}%` : "—"}
+                  </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[12px] text-mute uppercase tracking-widest mb-1">K/D Ratio</span>
-                  <span className="font-sans font-semibold text-[24px] text-ink">{displayKd || "0.00"}</span>
+                  <span className="font-sans font-semibold text-[24px] text-ink">{displayKd ?? "—"}</span>
                 </div>
               </div>
             </div>
@@ -203,7 +204,7 @@ export function DashboardSummary() {
                 ) : (
                   <PerformanceLineChart 
                     history={history} 
-                    currentElo={playerStats?.kurageElo || 0} 
+                    currentElo={playerStats?.kurageElo ?? null}
                   />
                 )}
               </div>
@@ -226,15 +227,26 @@ export function DashboardSummary() {
             </div>
 
             <div className="flex-1 w-full flex items-center justify-center mb-4">
-              <WinRateDonutChart wins={displayWinRateDonutSource.wins} matches={displayWinRateDonutSource.matches} />
+              {hasKurageData && kurageWins !== null && kurageMatches !== null ? (
+                <WinRateDonutChart wins={kurageWins} matches={kurageMatches} />
+              ) : faceitData?.winRate != null ? (
+                <div className="text-center">
+                  <span className="font-display text-2xl text-ink">{faceitData.winRate}%</span>
+                  <p className="mt-2 text-[10px] uppercase tracking-widest text-mute">Taxa informada pela FACEIT</p>
+                </div>
+              ) : (
+                <p className="text-sm text-mute">Sem partidas para calcular.</p>
+              )}
             </div>
 
             <div className="bg-surface-deep border border-white/5 rounded-xl p-4 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-accent-blue" />
-                <span className="text-[12px] text-mute">Vitórias ({hasKurageData ? 'Kurage' : 'Faceit'})</span>
+                <span className="text-[12px] text-mute">{hasKurageData ? "Vitórias no Kurage" : "Fonte externa"}</span>
               </div>
-              <span className="text-[12px] text-ink font-sans font-semibold">{displayWinRateDonutSource.wins}</span>
+              <span className="text-[12px] text-ink font-sans font-semibold">
+                {hasKurageData && kurageWins !== null ? kurageWins : faceitData?.winRate != null ? "FACEIT" : "—"}
+              </span>
             </div>
           </motion.div>
 
@@ -259,8 +271,12 @@ export function DashboardSummary() {
 
                 <div className="flex items-center gap-8 h-full z-10">
                   <div className="flex flex-col items-center">
-                    <FaceitLevelIcon level={faceitData?.level || 1} className="w-16 h-16 [&>svg]:w-full [&>svg]:h-full drop-shadow-md mb-2" />
-                    <span className="font-sans font-semibold text-[18px] text-ink font-bold">{faceitData?.elo || "---"} ELO</span>
+                    {faceitData?.level != null && (
+                      <FaceitLevelIcon level={faceitData.level} className="w-16 h-16 [&>svg]:w-full [&>svg]:h-full drop-shadow-md mb-2" />
+                    )}
+                    <span className="font-sans font-semibold text-[18px] text-ink font-bold">
+                      {faceitData?.elo != null ? `${faceitData.elo} ELO` : "ELO indisponível"}
+                    </span>
                   </div>
 
                   <div className="w-px h-full bg-white/10" />
@@ -288,11 +304,13 @@ export function DashboardSummary() {
                     <div className="flex items-center gap-6 mt-4">
                       <div className="flex flex-col">
                         <span className="text-[9px] text-mute uppercase">K/D</span>
-                        <span className="font-sans font-semibold text-[14px] text-ink">{faceitData?.kdRatio?.toFixed(2) || "0.00"}</span>
+                        <span className="font-sans font-semibold text-[14px] text-ink">{faceitData?.kdRatio?.toFixed(2) ?? "—"}</span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[9px] text-mute uppercase">Win Rate</span>
-                        <span className="font-sans font-semibold text-[14px] text-ink">{faceitData?.winRate || 0}%</span>
+                        <span className="font-sans font-semibold text-[14px] text-ink">
+                          {faceitData?.winRate != null ? `${faceitData.winRate}%` : "—"}
+                        </span>
                       </div>
                       {faceitData?.faceitUrl && (
                         <a href={faceitData.faceitUrl} target="_blank" rel="noopener noreferrer" className="mt-auto ml-auto text-[10px] text-mute hover:text-[#ff5500] transition-colors underline underline-offset-2 flex items-center gap-1">
@@ -308,7 +326,7 @@ export function DashboardSummary() {
               <div className="flex items-center gap-8 h-full">
                 <div className="flex flex-col items-center">
                   <Logo size={48} className="text-accent mb-4 opacity-50" />
-                  <span className="font-sans font-semibold text-[18px] text-ink font-bold">1000 ELO (Base)</span>
+                  <span className="font-sans font-semibold text-[18px] text-ink font-bold">ELO em calibração</span>
                 </div>
                 <div className="w-px h-full bg-white/10" />
                 <div className="flex flex-col">

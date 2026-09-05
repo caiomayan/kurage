@@ -130,7 +130,7 @@ public class FaceitService {
                 // Simplify result since Faceit returns "faction1" or "faction2" as winner
                 // To properly calculate win/loss we need to know which faction the player was on.
                 // For a simple tip, we can just grab the time of the matches.
-                history.add(new com.kurage.api.dto.response.FaceitMatchHistoryDTO(finishedAt, "Unknown"));
+                history.add(new com.kurage.api.dto.response.FaceitMatchHistoryDTO(finishedAt, null));
             }
             return history;
         } catch (Exception e) {

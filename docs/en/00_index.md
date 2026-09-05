@@ -65,6 +65,7 @@ flowchart TD
 16. [Legal and privacy readiness](./16_legal_readiness.md)
 17. [OCI and Vercel alpha deployment](./17_oci_vercel_alpha_deployment.md)
 18. [Branches, pull requests, and CI/CD](./18_branches_prs_ci.md)
+19. [Identity, profile, Rating, and ranking evolution plan (Portuguese)](../pt/19_plano_evolucao_identidade_rating_perfil.md) — planned, awaiting review; canonical decisions and continuation log.
 
 ## Repository policies
 
@@ -75,6 +76,6 @@ flowchart TD
 - [Security policy](../../SECURITY.md)
 - [Contribution policy](../../CONTRIBUTING.md)
 
-The `kurage.caiomayan.com` and `api.caiomayan.com` domains are the prepared alpha
-contract, but only become operational production after the first deployment and
-the gates documented in section 17.
+The `kurage.caiomayan.com` and `api.caiomayan.com` domains received the first
+web-alpha deployment and returned HTTP 200 on 31 August 2026. This is not a
+public/paid launch; remaining gates are documented in section 17.

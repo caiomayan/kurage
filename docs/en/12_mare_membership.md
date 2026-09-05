@@ -3,7 +3,7 @@
 [Versão em português](../pt/12_plano_mare.md)
 
 **Status:** product contract and entitlements implemented; billing planned.  
-**Last validated:** 26 August 2026.
+**Last validated:** 31 August 2026.
 
 ## Proposition
 
@@ -31,6 +31,12 @@ Retake-only plan and provides no competitive advantage.
 3. global priority: priority in official server queues without removing active
    players;
 4. early access to new modes and experiences.
+
+Visit tracking already exists in PostgreSQL, and the current API lets a
+Maré/Admin/Owner account read up to 20 visitors to its **own** profile. The visual
+panel and authorized reads for another profile remain planned in the
+[evolution plan](../pt/19_plano_evolucao_identidade_rating_perfil.md); callers
+without the entitlement must never receive identities or timestamps from the list.
 
 Maré never changes damage, economy, equipment, skill matchmaking, or match
 outcomes. Future benefits must preserve this rule.

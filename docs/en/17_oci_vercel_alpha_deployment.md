@@ -1,9 +1,14 @@
 # Alpha deployment — Vercel, Cloudflare, and Oracle Cloud
 
-**Status:** OCI infrastructure provisioned and bootstrap confirmed by the operator;
-first web deployment still pending.
+**Status:** first web-only deployment complete; Vercel frontend and OCI backend
+are operational in the alpha topology. No public CS2 server exists yet.
 
-**Documentation last validated:** 30 August 2026.
+**Documentation/HTTP last validated:** 31 August 2026.
+
+On 31 August, `https://kurage.caiomayan.com` and
+`https://api.caiomayan.com/actuator/health` returned HTTP 200. The operator also
+confirmed sessions, inventory, and avatar in the deployed environment. This
+validates the web deployment, not the public-launch or billing gate.
 
 ## Adopted decision
 
@@ -60,10 +65,9 @@ Availability will depend on real heartbeats.
   build artifacts.
 - The short-lived GHCR token is removed from the host after deployment.
 - Deployment only follows tests against real PostgreSQL and Redis containers.
-- During bootstrap, leave the repository variable `BACKEND_DEPLOY_ENABLED`
-  unset or `false`: tests and publication continue, but deployment is skipped.
-  Set it to `true` only after the VM, DNS and secrets are ready, then use
-  **Backend CI/CD → Run workflow → main** for the first deployment.
+- The first deployment has completed with `BACKEND_DEPLOY_ENABLED=true`. For
+  future changes, retain that value only while the topology remains ready; use
+  **Backend CI/CD → Run workflow → main** for a controlled manual redeploy.
 - An unhealthy release automatically restores the previous configuration and
   image.
 

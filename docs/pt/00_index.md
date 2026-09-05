@@ -66,6 +66,7 @@ flowchart TD
 16. [Prontidão jurídica e de privacidade](./16_prontidao_juridica.md)
 17. [Deploy da alfa na OCI e Vercel](./17_deploy_alpha_oci_vercel.md)
 18. [Branches, pull requests e CI/CD](./18_branches_prs_ci.md)
+19. [Plano de evolução: identidade, perfil, Rating e ranking](./19_plano_evolucao_identidade_rating_perfil.md) — planejado, aguardando revisão; inclui registro de retomada.
 
 ## Documentos do repositório
 
@@ -76,6 +77,6 @@ flowchart TD
 - [Política de segurança](../../SECURITY.md)
 - [Política de contribuição](../../CONTRIBUTING.md)
 
-Os domínios `kurage.caiomayan.com` e `api.caiomayan.com` são o contrato preparado
-para a alfa, mas só constituem produção operacional depois do primeiro deploy e
-dos gates descritos no documento 17.
+Os domínios `kurage.caiomayan.com` e `api.caiomayan.com` receberam o primeiro
+deploy web de alfa e responderam HTTP 200 em 31/08/2026. Isso não equivale a
+lançamento público/pago: os gates restantes estão no documento 17.

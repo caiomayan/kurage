@@ -295,17 +295,18 @@ document is not legal advice.
 
 ### One publication strategy
 
-1. keep the canonical monorepo private;
-2. create signed releases and immutable archives;
-3. publish a separate sanitized case study with original screenshots, architecture,
-   metrics, and decisions;
-4. give recruiters named, revocable, time-limited private access;
-5. never publish `.env`, dumps, provider IDs, anti-fraud logic, or unlicensed assets.
+1. keep the canonical monorepo public as Kurage's technical portfolio;
+2. create attributable tags, releases, and immutable archives;
+3. use only original screenshots and synthetic data in public demos;
+4. keep the core under the repository's proprietary license and make it explicit
+   that visibility is not an open-source license;
+5. never publish `.env`, dumps, provider IDs, credentials, sensitive anti-fraud
+   logic, or assets without a clear chain of title.
 
-The reason is practical and legal: absent a public license, copyright remains
-reserved, but a public GitHub repository may still be viewed and forked through
-platform functionality. A private repository better controls secrecy, chain of
-title, and evaluation. See [GitHub's licensing guidance](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository)
+The reason is practical: public code enables direct portfolio review, but it can
+also be viewed and forked through GitHub functionality. The license defines
+permitted uses; secret hygiene, asset provenance, and attributable history protect
+operations and strengthen authorship evidence. See [GitHub's licensing guidance](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository)
 and [GitHub Terms](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service).
 
 ### Applied licensing
@@ -359,7 +360,7 @@ A stage ends on its audit exit criterion, not merely on a date.
 | Valve/FACEIT/host dependency | adapters, cache, explicit degradation, reviewed terms |
 | Abuse/smurf/fraud | 18+, server authority, limits, review, audit trail |
 | Third-party brand/assets | INPI search and asset register before publication |
-| Differentiator leakage | private repository and sanitized case study |
+| Accidental exposure in the public repository | proprietary license, secret review, and assets with provenance |
 | Premature complexity | modular monolith, one country, one currency, one provider per domain |
 
 ## 15. Portfolio presentation
@@ -371,14 +372,15 @@ The public case study should tell a verifiable story:
 3. as-built and target architecture;
 4. hard decisions around sessions, idempotent ELO, control plane, and billing;
 5. original screenshots, a synthetic-data demo, and diagrams;
-6. exact test results, including the current lint debt;
+6. exact test, lint, build, and scan results for the demonstrated commit, without
+   reusing historical counts;
 7. discovered incidents/risks and prioritization;
 8. design-partner results when available;
-9. bilingual documentation and private access on request.
+9. links to the bilingual documentation and public repository.
 
-For hiring, honesty increases technical value: “alpha with 137 backend tests and a
-passing frontend build, still blocked by P0” is more professional than claiming an
-unavailable production system.
+For hiring, honesty increases technical value: “private web alpha operating with
+domains and CI/CD, but still without a public CS2 server, billing, or a validated
+restore” is more professional than presenting it as an already-launched SaaS.
 
 ## 16. Success criterion
 

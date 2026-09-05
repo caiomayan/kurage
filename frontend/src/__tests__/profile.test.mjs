@@ -18,7 +18,7 @@ test("1. Subscription Features: hasSubscriptionFeature mapping", () => {
   assert.equal(hasSubscriptionFeature("MARE", "PROFILE_HIGHLIGHT"), true);
   assert.equal(hasSubscriptionFeature("MARE", "EARLY_ACCESS"), true);
 
-  // Null, undefined, and fallback
+  // Null, undefined, and unsupported tier
   assert.equal(hasSubscriptionFeature(null, "PROFILE_VISITORS"), false);
   assert.equal(hasSubscriptionFeature(undefined, "PROFILE_VISITORS"), false);
   assert.equal(hasSubscriptionFeature("INVALID", "PROFILE_VISITORS"), false);
@@ -47,8 +47,9 @@ test("2. Time Formatting: formatRelativeTime helper", () => {
   assert.equal(formatRelativeTime(new Date(now - 14 * 24 * 3600 * 1000)), "há 2 sem");
 
   // Edge cases & null safety
-  assert.equal(formatRelativeTime(null), "recentemente");
-  assert.equal(formatRelativeTime(undefined), "recentemente");
-  assert.equal(formatRelativeTime("not-a-valid-date"), "recentemente");
-  assert.equal(formatRelativeTime(""), "recentemente");
+  assert.equal(formatRelativeTime(null), "Horário indisponível");
+  assert.equal(formatRelativeTime(undefined), "Horário indisponível");
+  assert.equal(formatRelativeTime("not-a-valid-date"), "Horário indisponível");
+  assert.equal(formatRelativeTime(""), "Horário indisponível");
+  assert.equal(formatRelativeTime(new Date(now + 60_000)), "Horário indisponível");
 });

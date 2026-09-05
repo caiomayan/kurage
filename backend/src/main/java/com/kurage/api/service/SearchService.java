@@ -289,9 +289,9 @@ public class SearchService {
         Optional<PlayerStats> statsOpt = playerStatsRepository.findById(user.getId());
         Optional<UserFaceit> faceitOpt = userFaceitRepository.findById(user.getId());
 
-        int elo = 200;
-        int level = 3;
-        BigDecimal kd = BigDecimal.ZERO;
+        Integer elo = null;
+        Integer level = null;
+        BigDecimal kd = null;
         
         Integer faceitElo = null;
         Integer faceitLevel = null;
@@ -302,15 +302,14 @@ public class SearchService {
             faceitElo = faceit != null ? faceit.getElo() : null;
             faceitLevel = faceit != null ? faceit.getLevel() : null;
             faceitKdRatio = faceit.getKdRatio();
-            if (kd.compareTo(BigDecimal.ZERO) == 0 && faceitKdRatio != null) {
-                kd = faceitKdRatio;
-            }
         }
 
         if (statsOpt.isPresent()) {
             PlayerStats stats = statsOpt.get();
-            elo = stats.getKurageElo() != null ? stats.getKurageElo() : 200;
-            level = stats.getKurageLevel();
+            if (stats.isCalibrated()) {
+                elo = stats.getKurageElo();
+                level = stats.getKurageLevel();
+            }
             int deaths = stats.getDeaths() != null ? stats.getDeaths() : 0;
             int kills = stats.getKills() != null ? stats.getKills() : 0;
             if (deaths > 0 || kills > 0) {
@@ -329,10 +328,14 @@ public class SearchService {
         }
 
         SearchPlayerResult.HighlightStat highlightStat;
-        if (kd.compareTo(BigDecimal.ZERO) > 0) {
+        if (kd != null) {
             highlightStat = new SearchPlayerResult.HighlightStat("K/D", kd.toPlainString());
-        } else {
+        } else if (elo != null) {
             highlightStat = new SearchPlayerResult.HighlightStat("ELO", String.valueOf(elo));
+        } else if (faceitElo != null) {
+            highlightStat = new SearchPlayerResult.HighlightStat("FACEIT", String.valueOf(faceitElo));
+        } else {
+            highlightStat = null;
         }
 
         return new SearchPlayerResult(
@@ -363,7 +366,7 @@ public class SearchService {
                 team.getTag(),
                 team.getLogoUrl(),
                 team.getCountry(),
-                team.getTeamElo() != null ? team.getTeamElo() : 200,
+                team.getTeamElo(),
                 memberCount
         );
     }

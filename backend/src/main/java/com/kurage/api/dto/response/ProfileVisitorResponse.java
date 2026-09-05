@@ -9,9 +9,5 @@ public record ProfileVisitorResponse(
         Long kurageId,
         String username,
         String avatarUrl,
-        String country,
-        int kurageLevel,
-        int kurageElo,
-        boolean isVerifiedPro,
         Instant visitedAt
 ) implements Serializable {}

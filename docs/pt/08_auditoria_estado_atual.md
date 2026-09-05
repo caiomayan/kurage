@@ -15,11 +15,18 @@
 > chaves imutáveis. Os achados originais permanecem abaixo como baseline e a
 > tabela de P0 registra o estado resolvido.
 >
-> **Atualização de integridade dos dados (29/08/2026):** perfis, hovercards,
-> menu, home e ranking deixaram de fabricar posição, ELO, rating e histórico.
-> Contas sem partidas não recebem posição nem entram na classificação. A regra
-> foi validada contra PostgreSQL 16 real; lint, testes e build do frontend agora
-> também são um gate dedicado do CI.
+> **Retificação de integridade (31/08/2026):** ranking, gráficos e estados vazios
+> deixaram de fabricar posição/histórico; a classificação agora exige 5 partidas.
+> O rating `1.00`, ELO/level substitutos e mistura implícita com FACEIT foram
+> removidos dos contratos revisados. A migração global dos testes mockados ainda
+> está em andamento na etapa 1 do
+> [plano de evolução](./19_plano_evolucao_identidade_rating_perfil.md).
+>
+> **Atualização operacional (31/08/2026):** o primeiro deploy somente web foi
+> concluído. Frontend e health público da API responderam HTTP 200 e o operador
+> validou sessão, inventário e avatar. Isso não aprova lançamento público/pago;
+> servidor CS2 continua local e os gates de backup, jurídico e monitoramento
+> permanecem.
 >
 > **Atualização de estados de falha (29/08/2026):** ranking, busca, pódio da home,
 > inventário público e perfis distinguem ausência legítima de indisponibilidade.
@@ -175,9 +182,11 @@ primeira janela e filtra no cliente. O backend inicializa o ELO em 200, porém n
 há ingestão de partida nem operação que atualize estatísticas competitivas.
 
 Na linha de base, o frontend mascarava ausência com `#1`, ELO `2000`, rating
-`1.0` e pontos de gráfico fabricados. Isso foi corrigido em 29/08: dados ausentes
-aparecem como indisponíveis ou “em calibração”, gráficos usam somente snapshots
-persistidos e contas com zero partidas são excluídas das consultas de ranking.
+`1.0` e pontos de gráfico fabricados. Em 29/08, ranking/gráficos passaram a usar
+estados honestos e contas sem calibração foram excluídas das consultas. Em 31/08,
+o rating fixo do hovercard, os ELOs/levels substitutos e a mistura implícita com
+FACEIT também foram removidos dos contratos afetados. A remoção dos testes
+mockados segue em andamento por domínio.
 
 ### 5.3 Times
 
@@ -262,7 +271,7 @@ uma verificação editorial independente e nunca é vendido pelo plano.
 | P0-08 | **Resolvido em 27/08:** rotação refresh não era atômica e expunha tokens em chaves Redis | Compare-and-set Lua, hash, grace concorrente e duração absoluta implementados |
 | P0-09 | **Resolvido em 29/08:** upload público aceitava conteúdo arbitrário e sobrescrevia uma chave estável | Limite de 5 MB/dimensões/pixels, detecção real PNG/JPEG, decode/reencode 512×512, MIME fixo, chave imutável, limpeza pós-commit e rate limit implementados; reconciliação periódica de órfãos fica como melhoria operacional |
 | P0-10 | **Resolvido em 29/08:** IP era enviado por HTTP a geolocalização externa | Cadastro aceita somente país validado do edge; sem fallback de país e sem transmissão de IP bruto |
-| P0-11 | **Resolvido em 29/08:** perfil fabricava `#1`, 2000, rating 1.0 e histórico | Estados honestos, histórico persistido e exclusão de contas sem partidas implementados e validados no PostgreSQL |
+| P0-11 | **Resolvido nos contratos revisados em 31/08:** ranking, hovercard, visitantes, busca e resumos não publicam rating/ELO/level substitutos | Manter regressão coberta e concluir a remoção global de mocks por domínio |
 | P0-12 | **Resolvido para a alfa em 29/08:** havia referências a rotas inexistentes | Links e sitemap não publicam essas rotas; experiência completa de times segue como P1 |
 | P0-13 | **Resolvido em 29/08:** lint falhava com 85 erros e 86 warnings | Lint zero, testes e build de produção executados no workflow dedicado `frontend-quality.yml` |
 | P0-14 | **Parcial em 29/08:** termos, privacidade e AUP reais substituíram `#` | Minutas ainda exigem dados do controlador/canais e revisão jurídica antes de usuários reais; política comercial virá com billing |
@@ -334,6 +343,10 @@ uma verificação editorial independente e nunca é vendido pelo plano.
 | Plugins C# | Revisão estática; sem SDK .NET para build |
 | QA visual browser | Runtime integrado indisponível |
 | Produção pública | domínio principal respondeu 404; API/www/play não resolveram DNS na data-base |
+
+Atualização pós-baseline de 31/08: `kurage.caiomayan.com` e
+`api.caiomayan.com/actuator/health` responderam HTTP 200. É um deploy web de alfa,
+não aprovação do gate de produção pública descrito na seção 15.
 
 Na linha de base desta auditoria, os testes Java usavam H2 e Mongo mockado. Esse
 ponto foi corrigido em 27/08/2026: H2/Mongo foram removidos e, em 29/08, 23
@@ -454,14 +467,14 @@ Para evitar documentação com caminhos concorrentes, estas são as decisões ú
 | Público inicial | jogadores/capitães 18+ de times amadores e semiprofissionais no Brasil |
 | Proposta | identidade + operação do time + servidor sob demanda + resultado verificável |
 | Backend | monólito modular Spring Boot |
-| Fonte transacional | PostgreSQL; MongoDB será removido |
+| Fonte transacional | PostgreSQL; MongoDB já foi removido da operação |
 | Pagamento | Mercado Pago, BRL |
-| Servidor | DatHost API, São Paulo primeiro, horas pré-pagas |
+| Servidor | Retake #1 local no desenvolvimento; hospedagem pública ainda não contratada |
 | Autoridade de partida | servidor Kurage + evento final assinado/idempotente |
 | Inventário | simulador virtual gratuito, privado por padrão, sem valor/cash-out |
 | Verificação PRO | editorial/manual, jamais comprável |
 | Telemetria pública | resultado ranked público; live/raw minimizado e com retenção definida |
-| Repositório | canônico privado; case público sanitizado e acesso temporário a recrutadores |
+| Repositório | canônico público como portfólio, com núcleo sob licença proprietária e histórico livre de segredos |
 | Licença | núcleo proprietário; plugins MIT por exigência de compatibilidade |
 
 ## 15. Gate de produção

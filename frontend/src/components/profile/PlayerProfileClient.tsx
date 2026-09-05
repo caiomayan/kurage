@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   PiChartBar,
@@ -14,8 +14,10 @@ import { PlayerMetricsRibbon } from "./PlayerMetricsRibbon";
 import { EloEvolutionBentoCell } from "./PlayerChartsSection";
 import { PlayerInventoryShowcase } from "./PlayerInventoryShowcase";
 import { PlayerMatchesFeed } from "./PlayerMatchesFeed";
+import { ProfileVisitors } from "./ProfileVisitors";
 import { cn } from "@/lib/utils";
-import type { PlayerStats, UserWithStats } from "@/types/user";
+import { api } from "@/lib/api";
+import { hasSubscriptionFeature, type PlayerStats, type UserWithStats } from "@/types/user";
 
 interface PlayerProfileClientProps {
   user: UserWithStats;
@@ -25,7 +27,7 @@ interface PlayerProfileClientProps {
 type ProfileTab = "overview" | "inventory" | "matches";
 
 export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientProps) {
-  const { user: authUser } = useAuth();
+  const { user: authUser, isLoading: isAuthLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
 
   // Check if current visitor is the profile owner
@@ -49,6 +51,21 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
     stats: mergedStats,
   };
 
+  const canViewVisitors = Boolean(
+    authUser &&
+      (authUser.role === "OWNER" ||
+        authUser.role === "ADMIN" ||
+        hasSubscriptionFeature(authUser.subscriptionTier, "PROFILE_VISITORS"))
+  );
+
+  useEffect(() => {
+    if (isAuthLoading || !authUser || isOwner) return;
+
+    api.post<void>(`/users/kurage/${initialUser.kurageId}/visit`).catch(() => {
+      // A visita é telemetria auxiliar e não deve bloquear a leitura do perfil.
+    });
+  }, [authUser, initialUser.kurageId, isAuthLoading, isOwner]);
+
   const stats = user.stats;
   const matches = stats?.matchesPlayed ?? 0;
   const hltvRating = stats?.hltvRating ?? null;
@@ -69,7 +86,7 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
           user={user}
           faceitLevel={user.faceitLevel ?? null}
           currentRank={user.rankPosition ?? null}
-          rankDelta={user.rankDelta ?? 0}
+          rankDelta={user.rankDelta ?? null}
         />
 
         {/* 3. PROFILE NAVIGATION TABS */}
@@ -141,6 +158,8 @@ export function PlayerProfileClient({ user: initialUser }: PlayerProfileClientPr
                   kastPercentage={stats?.kastPercentage ?? null}
                   winRate={winRate}
                 />
+
+                {canViewVisitors && <ProfileVisitors kurageId={user.kurageId} />}
 
                 {/* ELO Evolution / Calibration Tide Curve */}
                 <EloEvolutionBentoCell

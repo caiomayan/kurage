@@ -53,7 +53,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
@@ -76,7 +75,6 @@ public class UserService {
     private final S3Service s3Service;
     private final SteamAuthService steamAuthService;
     private final PlayerStatsService playerStatsService;
-    private final ProfileVisitService profileVisitService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient avatarHttpClient = HttpClient.newBuilder()
@@ -90,16 +88,9 @@ public class UserService {
                 return nextId;
             }
         } catch (Exception e) {
-            log.warn("Database function generate_next_kurage_id failed, using fallback: {}", e.getMessage());
+            throw new IllegalStateException("Could not generate a Kurage ID from PostgreSQL", e);
         }
-
-        // Fallback local caso a function do banco não responda
-        int gap = ThreadLocalRandom.current().nextInt(7, 20); // gap entre 7 e 19
-        Long maxId = userRepository.findMaxKurageId();
-        if (maxId == null || maxId < 1000) {
-            maxId = 1000L;
-        }
-        return maxId + gap;
+        throw new IllegalStateException("PostgreSQL returned no Kurage ID");
     }
 
     public UserResponse create(CreateUserRequest dto) {
@@ -151,8 +142,7 @@ public class UserService {
         PlayerStatsResponse stats = playerStats.map(PlayerStatsResponse::create).orElse(null);
         Integer rankPosition = null;
         Integer rankDelta = null;
-        if (playerStats.isPresent() && playerStats.get().getMatchesPlayed() != null
-                && playerStats.get().getMatchesPlayed() > 0) {
+        if (playerStats.isPresent() && playerStats.get().isCalibrated()) {
             PlayerStats persistedStats = playerStats.get();
             rankPosition = playerStatsRepository.findLeaderboardPosition(persistedStats.getKurageElo());
             int currentPosition = rankPosition;
@@ -167,17 +157,13 @@ public class UserService {
         return UserResponse.create(target, stats, faceitLevel, rankPosition, rankDelta);
     }
 
-    public Optional<UserResponse> getUserBySteamId(String steamId64, User currentUser) {
+    public Optional<UserResponse> getUserBySteamId(String steamId64) {
         String cacheKey = "cache:profile:steam:" + steamId64;
 
         try {
             String cached = redisTemplate.opsForValue().get(cacheKey);
             if (cached != null) {
-                UserResponse res = objectMapper.readValue(cached, UserResponse.class);
-                if (currentUser != null && !currentUser.getSteamId64().equals(steamId64)) {
-                    userRepository.findBySteamId64(steamId64).ifPresent(target -> profileVisitService.recordVisit(target, currentUser));
-                }
-                return Optional.of(res);
+                return Optional.of(objectMapper.readValue(cached, UserResponse.class));
             }
         } catch (Exception ignored) {}
 
@@ -185,10 +171,6 @@ public class UserService {
 
         if (userOpt.isPresent()) {
             User target = userOpt.get();
-            if (currentUser != null && !currentUser.getId().equals(target.getId())) {
-                profileVisitService.recordVisit(target, currentUser);
-            }
-
             UserResponse response = buildUserResponse(target);
             try {
                 redisTemplate.opsForValue().set(
@@ -203,17 +185,13 @@ public class UserService {
         return Optional.empty();
     }
 
-    public Optional<UserResponse> getUserByKurageId(Long kurageId, User currentUser) {
+    public Optional<UserResponse> getUserByKurageId(Long kurageId) {
         String cacheKey = "cache:profile:kurage:" + kurageId;
 
         try {
             String cached = redisTemplate.opsForValue().get(cacheKey);
             if (cached != null) {
-                UserResponse res = objectMapper.readValue(cached, UserResponse.class);
-                if (currentUser != null && (currentUser.getKurageId() == null || !currentUser.getKurageId().equals(kurageId))) {
-                    userRepository.findByKurageId(kurageId).ifPresent(target -> profileVisitService.recordVisit(target, currentUser));
-                }
-                return Optional.of(res);
+                return Optional.of(objectMapper.readValue(cached, UserResponse.class));
             }
         } catch (Exception ignored) {}
 
@@ -221,10 +199,6 @@ public class UserService {
 
         if (userOpt.isPresent()) {
             User target = userOpt.get();
-            if (currentUser != null && !currentUser.getId().equals(target.getId())) {
-                profileVisitService.recordVisit(target, currentUser);
-            }
-
             UserResponse response = buildUserResponse(target);
             try {
                 redisTemplate.opsForValue().set(
@@ -239,7 +213,7 @@ public class UserService {
         return Optional.empty();
     }
 
-    public Optional<UserResponse> getUserByIdentifier(String identifier, User currentUser) {
+    public Optional<UserResponse> getUserByIdentifier(String identifier) {
         if (identifier == null || identifier.isBlank()) {
             return Optional.empty();
         }
@@ -247,14 +221,14 @@ public class UserService {
 
         // 1. SteamID64 (17 digits starting with 7656)
         if (trimmed.length() == 17 && trimmed.startsWith("7656") && trimmed.matches("\\d+")) {
-            return getUserBySteamId(trimmed, currentUser);
+            return getUserBySteamId(trimmed);
         }
 
         // 2. Kurage ID (numeric)
         if (trimmed.matches("\\d+")) {
             try {
                 Long kurageId = Long.parseLong(trimmed);
-                Optional<UserResponse> byKurage = getUserByKurageId(kurageId, currentUser);
+                Optional<UserResponse> byKurage = getUserByKurageId(kurageId);
                 if (byKurage.isPresent()) {
                     return byKurage;
                 }
@@ -266,26 +240,17 @@ public class UserService {
             UUID uuid = UUID.fromString(trimmed);
             Optional<User> userOpt = userRepository.findById(uuid);
             if (userOpt.isPresent()) {
-                User target = userOpt.get();
-                if (currentUser != null && !currentUser.getId().equals(target.getId())) {
-                    profileVisitService.recordVisit(target, currentUser);
-                }
-                return Optional.of(buildUserResponse(target));
+                return Optional.of(buildUserResponse(userOpt.get()));
             }
         } catch (IllegalArgumentException ignored) {}
 
         // 4. Username
         Optional<User> userByUsername = userRepository.findByUsernameIgnoreCase(trimmed);
         if (userByUsername.isPresent()) {
-            User target = userByUsername.get();
-            if (currentUser != null && !currentUser.getId().equals(target.getId())) {
-                profileVisitService.recordVisit(target, currentUser);
-            }
-            return Optional.of(buildUserResponse(target));
+            return Optional.of(buildUserResponse(userByUsername.get()));
         }
 
-        // Fallback: try steamId
-        return getUserBySteamId(trimmed, currentUser);
+        return getUserBySteamId(trimmed);
     }
 
     public Optional<HovercardResponse> getHovercard(Long kurageId) {
@@ -305,35 +270,29 @@ public class UserService {
 
         User user = userOpt.get();
         Optional<PlayerStats> statsOpt = playerStatsRepository.findById(user.getId());
-        Optional<UserFaceit> faceitOpt = userFaceitRepository.findById(user.getId());
-
-        int kurageElo = 200;
-        int kurageLevel = 1;
-        BigDecimal kdRatio = BigDecimal.ZERO;
+        Integer kurageElo = null;
+        Integer kurageLevel = null;
+        BigDecimal kdRatio = null;
         Integer winRate = null;
-        Integer matchesPlayed = 0;
+        Integer matchesPlayed = null;
         BigDecimal hltvRating = null;
 
         if (statsOpt.isPresent()) {
             PlayerStats stats = statsOpt.get();
-            kurageElo = stats.getKurageElo() != null ? stats.getKurageElo() : 200;
-            kurageLevel = stats.getKurageLevel();
             matchesPlayed = stats.getMatchesPlayed() != null ? stats.getMatchesPlayed() : 0;
+            if (stats.isCalibrated()) {
+                kurageElo = stats.getKurageElo();
+                kurageLevel = stats.getKurageLevel();
+            }
             int deaths = stats.getDeaths() != null ? stats.getDeaths() : 0;
             int kills = stats.getKills() != null ? stats.getKills() : 0;
-            kdRatio = deaths > 0
-                    ? BigDecimal.valueOf((double) kills / deaths).setScale(2, RoundingMode.HALF_UP)
-                    : (kills > 0 ? BigDecimal.valueOf(kills).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO);
+            if (matchesPlayed > 0) {
+                kdRatio = deaths > 0
+                        ? BigDecimal.valueOf((double) kills / deaths).setScale(2, RoundingMode.HALF_UP)
+                        : BigDecimal.valueOf(kills).setScale(2, RoundingMode.HALF_UP);
+            }
             int matchesWon = stats.getMatchesWon() != null ? stats.getMatchesWon() : 0;
             winRate = matchesPlayed > 0 ? (int) Math.round(((double) matchesWon / matchesPlayed) * 100) : null;
-            if (matchesPlayed > 0) {
-                hltvRating = BigDecimal.valueOf(1.00).setScale(2, RoundingMode.HALF_UP);
-            }
-        } else if (faceitOpt.isPresent()) {
-            UserFaceit faceit = faceitOpt.get();
-            kdRatio = faceit.getKdRatio() != null ? faceit.getKdRatio() : BigDecimal.ZERO;
-            winRate = faceit.getWinRate();
-            matchesPlayed = faceit.getMatches() != null ? faceit.getMatches() : 0;
         }
 
         String teamTag = null;

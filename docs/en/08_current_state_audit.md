@@ -15,11 +15,17 @@
 > Original findings remain below as the baseline, while the P0 table records
 > resolved status.
 >
-> **Data integrity update (29 August 2026):** profiles, hovercards, user menu,
-> home, and ranking no longer fabricate position, ELO, rating, or history.
-> Accounts without matches receive no position and are excluded from the
-> leaderboard. The rule was validated against real PostgreSQL 16; frontend lint,
-> tests, and production build are now enforced by a dedicated CI gate.
+> **Data integrity correction (31 August 2026):** leaderboards, charts, and empty
+> states no longer fabricate position/history; ranking now requires five matches.
+> The fixed `1.00` rating, substitute ELO/level values, and implicit FACEIT mixing
+> were removed from the reviewed contracts. Global migration away from mocked
+> tests remains in progress in step 1 of the
+> [evolution plan](../pt/19_plano_evolucao_identidade_rating_perfil.md).
+>
+> **Operational update (31 August 2026):** the first web-only deployment was
+> completed. The frontend and public API health returned HTTP 200; the operator
+> validated sessions, inventory, and avatar. This does not approve public/paid
+> launch: CS2 remains local and backup, legal, and monitoring gates remain.
 >
 > **Failure-state update (29 August 2026):** ranking, search, home podium, public
 > inventory, and profiles now distinguish legitimate absence from service
@@ -179,9 +185,11 @@ ranking fetches a first window and filters locally. Backend ELO starts at 200, b
 there is no match ingestion or operation that updates competitive statistics.
 
 At the baseline, the frontend substituted missing information with `#1`, ELO
-`2000`, rating `1.0`, and synthetic chart points. This was corrected on 29 August:
-unknown data renders as unavailable or “calibrating,” charts use only persisted
-snapshots, and zero-match accounts are excluded by the ranking queries.
+`2000`, rating `1.0`, and synthetic chart points. On 29 August, leaderboard/chart
+states became honest and uncalibrated accounts were excluded. On 31 August, the
+fixed hovercard rating, substitute ELO/level values, and implicit FACEIT mixing
+were also removed from the affected contracts. Migration away from mocked tests
+continues domain by domain.
 
 ### 5.3 Teams
 
@@ -265,7 +273,7 @@ remains an independent editorial verification and is never sold by the plan.
 | P0-08 | **Resolved 27 Aug:** refresh rotation was non-atomic and exposed raw Redis keys | Lua compare-and-set, hashing, concurrency grace, and absolute lifetime implemented |
 | P0-09 | **Resolved 29 Aug:** public upload accepted arbitrary content and overwrote a stable key | 5 MB/dimension/pixel limits, actual PNG/JPEG detection, 512×512 decode/re-encode, fixed MIME, immutable keys, post-commit cleanup, and upload rate limiting implemented; periodic orphan reconciliation remains operational work |
 | P0-10 | **Resolved 29 Aug:** IP was sent to an HTTP geolocation service | Registration accepts only a validated edge-country code, with no country fallback or raw-IP transmission |
-| P0-11 | **Resolved 29 Aug:** profile invented `#1`, 2000, rating 1.0, and history | Honest states, persisted history, and exclusion of zero-match accounts implemented and PostgreSQL-validated |
+| P0-11 | **Resolved in reviewed contracts on 31 Aug:** ranking, hovercards, visitors, search, and summaries no longer publish substitute rating/ELO/level data | Keep regression coverage and finish domain-by-domain removal of mocks |
 | P0-12 | **Resolved for alpha 29 Aug:** missing routes were referenced | Links and sitemap no longer publish them; full team UX remains P1 |
 | P0-13 | **Resolved 29 Aug:** lint failed with 85 errors and 86 warnings | Zero lint issues, tests, and production build enforced by dedicated `frontend-quality.yml` workflow |
 | P0-14 | **Partial 29 Aug:** real terms, privacy, and AUP drafts replaced `#` | Controller/contact details and legal review are required before real users; commercial policy ships with billing |
@@ -336,6 +344,10 @@ remains an independent editorial verification and is never sold by the plan.
 | C# plugins | Static review; no .NET SDK for build |
 | Visual browser QA | Integrated runtime unavailable |
 | Public production | main domain returned 404; API/www/play had no DNS resolution on baseline date |
+
+Post-baseline update on 31 August: `kurage.caiomayan.com` and
+`api.caiomayan.com/actuator/health` returned HTTP 200. This is a web-alpha deploy,
+not approval of the public-production gate in section 15.
 
 At this audit's baseline, Java tests used H2 and mocked Mongo. This was corrected
 on 27 August 2026: H2/Mongo were removed. As of 29 August, 23 integrations run
@@ -455,14 +467,14 @@ These are the single approved choices, not parallel options:
 | Initial users | 18+ captains/players on amateur and semi-professional Brazilian teams |
 | Promise | identity + team operation + on-demand server + verifiable result |
 | Backend | Spring Boot modular monolith |
-| Transactional source | PostgreSQL; MongoDB will be removed |
+| Transactional source | PostgreSQL; MongoDB has already been removed from operations |
 | Payments | Mercado Pago in BRL |
-| Servers | DatHost API, São Paulo first, prepaid hours |
+| Servers | Retake #1 runs locally in development; public game hosting is not contracted yet |
 | Match authority | Kurage server + signed, idempotent final event |
 | Inventory | free virtual simulator, private by default, no value/cash-out |
 | Pro verification | editorial/manual, never purchasable |
 | Public telemetry | ranked result public; live/raw minimized with explicit retention |
-| Repository | private canonical repo; sanitized public case study; temporary recruiter access |
+| Repository | public canonical portfolio repository, with a proprietary core and a secret-free history |
 | Licensing | proprietary core; MIT plugins for compatibility |
 
 ## 15. Production gate

@@ -92,7 +92,7 @@ test("3. Validation: directInviteSchema (SteamID64 17-digits)", () => {
 });
 
 test("4. Business Rules: categorizeTeamMembers", () => {
-  const mockMembers = [
+  const members = [
     { id: "1", teamRole: "PLAYER", user: { id: "u1" } },
     { id: "2", teamRole: "PLAYER", user: { id: "u2" } },
     { id: "3", teamRole: "SUBSTITUTE", user: { id: "u3" } },
@@ -100,7 +100,7 @@ test("4. Business Rules: categorizeTeamMembers", () => {
     { id: "5", teamRole: "ASSISTANT_COACH", user: { id: "u5" } },
   ];
 
-  const composition = categorizeTeamMembers(mockMembers);
+  const composition = categorizeTeamMembers(members);
   assert.equal(composition.players.length, 2);
   assert.equal(composition.substitutes.length, 1);
   assert.equal(composition.coach?.id, "4");
@@ -148,7 +148,7 @@ test("5. Business Rules: canAddRole Limits", () => {
 });
 
 test("6. Permissions: canManageTeam & isTeamOwner", () => {
-  const mockTeam = {
+  const team = {
     id: "t1",
     name: "Kurage Esports",
     tag: "KUR",
@@ -161,17 +161,17 @@ test("6. Permissions: canManageTeam & isTeamOwner", () => {
   };
 
   // canManageTeam
-  assert.equal(canManageTeam("owner-uuid", mockTeam), true);
-  assert.equal(canManageTeam("admin-uuid", mockTeam), true);
-  assert.equal(canManageTeam("member-uuid", mockTeam), false);
-  assert.equal(canManageTeam("outsider-uuid", mockTeam), false);
-  assert.equal(canManageTeam(undefined, mockTeam), false);
+  assert.equal(canManageTeam("owner-uuid", team), true);
+  assert.equal(canManageTeam("admin-uuid", team), true);
+  assert.equal(canManageTeam("member-uuid", team), false);
+  assert.equal(canManageTeam("outsider-uuid", team), false);
+  assert.equal(canManageTeam(undefined, team), false);
 
   // isTeamOwner
-  assert.equal(isTeamOwner("owner-uuid", mockTeam), true);
-  assert.equal(isTeamOwner("admin-uuid", mockTeam), false);
-  assert.equal(isTeamOwner("member-uuid", mockTeam), false);
-  assert.equal(isTeamOwner("outsider-uuid", mockTeam), false);
+  assert.equal(isTeamOwner("owner-uuid", team), true);
+  assert.equal(isTeamOwner("admin-uuid", team), false);
+  assert.equal(isTeamOwner("member-uuid", team), false);
+  assert.equal(isTeamOwner("outsider-uuid", team), false);
 });
 
 test("7. Business Rules: isInviteLinkActive", () => {
@@ -239,4 +239,3 @@ test("7. Business Rules: isInviteLinkActive", () => {
   assert.equal(isInviteLinkActive(null), false);
   assert.equal(isInviteLinkActive(undefined), false);
 });
-
